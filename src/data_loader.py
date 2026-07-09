@@ -61,7 +61,17 @@ def normalize_raw_data(df: pd.DataFrame, warnings: list[str] | None = None) -> p
 
     for col in ["当前进度", "进度偏差", "时间进度", "B-服务采购比例", *EXEC_RATIO_COLUMNS]:
         if col in out.columns:
-            out[col] = pd.to_numeric(out[col], errors="coerce")
+            out[col] = coerce_ratio_series(out[col])
+
+    for col in ["收入", "C-中标/合同金额", "预估项目金额"]:
+        # pandas 3 把纯文本列读成 str dtype（非 object），用数值判断反向识别
+        if col in out.columns and not pd.api.types.is_numeric_dtype(out[col]):
+            cleaned = out[col].astype(str).str.replace(",", "", regex=False).str.replace("，", "", regex=False)
+            numeric = pd.to_numeric(cleaned, errors="coerce")
+            failed = int((out[col].notna() & numeric.isna()).sum())
+            if failed:
+                warnings.append(f"{col} 有 {failed} 个值无法解析为数字（如带货币符号/单位），已按空值处理。")
+            out[col] = numeric
 
     for col in ["预计交付日期", "预计验收日期（若已签约，默认经法）", "最新进度更新日期", "开始执行日期"]:
         if col in out.columns:
@@ -114,6 +124,19 @@ def derive_archive_action_columns(df: pd.DataFrame, warnings: list[str]) -> None
         )
 
 
+def coerce_ratio_series(series: pd.Series) -> pd.Series:
+    """Parse ratio columns tolerating percent strings like "50%"."""
+    numeric = pd.to_numeric(series, errors="coerce")
+    # 覆盖 object 与 pandas 3 的 str dtype 两种文本列
+    if not pd.api.types.is_numeric_dtype(series):
+        text = series.astype(str).str.strip()
+        is_percent = text.str.endswith("%")
+        if is_percent.any():
+            percent_values = pd.to_numeric(text.str.rstrip("%"), errors="coerce") / 100
+            numeric = numeric.fillna(percent_values.where(is_percent))
+    return numeric
+
+
 def parse_excel_date_series(series: pd.Series) -> pd.Series:
     """Parse Excel serials or normal date strings into pandas timestamps.
 
@@ -133,9 +156,16 @@ def parse_excel_date_series(series: pd.Series) -> pd.Series:
 
 def ensure_execution_people_and_ratios(df: pd.DataFrame, warnings: list[str]) -> None:
     """Create virtual equal-split execution people/ratios when manual fields are blank."""
-    for col in EXEC_PERSON_COLUMNS + EXEC_RATIO_COLUMNS:
+    # 人名列必须是 object dtype：整列为空的上传会被读成 float64，
+    # pandas 3.x 往 float 列写字符串直接抛 TypeError。
+    for col in EXEC_PERSON_COLUMNS:
         if col not in df.columns:
-            df[col] = pd.NA
+            df[col] = pd.Series(pd.NA, index=df.index, dtype="object")
+        elif df[col].dtype != object:
+            df[col] = df[col].astype("object")
+    for col in EXEC_RATIO_COLUMNS:
+        if col not in df.columns:
+            df[col] = pd.Series(float("nan"), index=df.index, dtype="float64")
 
     df["执行比例是否虚拟"] = detect_virtual_ratio_marker(df)
 
@@ -186,8 +216,14 @@ def detect_virtual_ratio_marker(df: pd.DataFrame) -> pd.Series:
     return markers
 
 
+NAME_SEPARATORS = ("，", "、", "；", ";")
+
+
 def split_people(value: object) -> list[str]:
+    """Split a delimited name/region list; single source of truth for separators."""
     if pd.isna(value):
         return []
-    text = str(value).replace("，", ",")
+    text = str(value)
+    for sep in NAME_SEPARATORS:
+        text = text.replace(sep, ",")
     return [part.strip() for part in text.split(",") if part.strip()]

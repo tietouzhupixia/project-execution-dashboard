@@ -179,6 +179,25 @@ screenshots in `D:\英大碳资产实习\进度信息表\1.png`-`6.png`:
 - Playwright gotcha: Streamlit multiselect's first popover item is 全选
   (select-all) — pick options by text in automation scripts.
 
+## 2026-07-09 pandas 3 / Streamlit Cloud compatibility hardening
+
+Cloud runs Python 3.14 + pandas 3.x. Rules learned (do not regress):
+
+- Writing a string into a float64 column cell RAISES TypeError in pandas 3.
+  执行人员1-5 arrive as all-NaN float64 when the upload has them empty;
+  `ensure_execution_people_and_ratios` coerces them to object dtype first.
+- pandas 3 reads pure-text columns as `str` dtype (NOT object). Never gate
+  text-parsing on `dtype == object`; use `not is_numeric_dtype(...)`.
+- `pd.Series(pd.NA, dtype="float64")` raises — use `float("nan")`.
+- Tolerated inputs: percent strings ("50%") in ratio columns, thousand
+  separators in money columns (unparseable money warns instead of silent 0),
+  name/region separators ，、；; (single source: `split_people`).
+- app.py wraps load AND metric/export computation in try/except because
+  Streamlit Cloud redacts tracebacks from viewers; upload parsing is cached
+  with st.cache_data keyed on file bytes.
+- requirements.txt = runtime only (cloud installs this); dev tools live in
+  requirements-dev.txt.
+
 ## Verification Done
 
 - `python -m compileall -q app.py src tests` passed.

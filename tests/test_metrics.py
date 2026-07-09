@@ -297,6 +297,80 @@ def test_build_export_workbook_sheets_and_values():
     assert "启动应归档" in base.columns
 
 
+def test_virtual_fill_into_all_nan_float_columns():
+    """执行人员1-5 列整列为空时被读成 float64；虚拟填充人名不得因 dtype 报错。
+
+    pandas 3.x 对 float 列写入字符串会抛 TypeError（Streamlit Cloud 崩溃根因）。
+    """
+    raw = pd.DataFrame(
+        {
+            "A-执行人员": ["张三,李四,王五"],
+            "收入": [100.0],
+            "B-服务采购比例": [0.0],
+        }
+    )
+    for i in range(1, 6):
+        raw[f"执行人员{i}"] = pd.Series([float("nan")], dtype="float64")
+        raw[f"执行人员{i}执行比例"] = pd.Series([float("nan")], dtype="float64")
+
+    out = normalize_raw_data(raw, [])
+    assert out.loc[0, "执行人员3"] == "王五"
+    assert out.loc[0, "执行人员1执行比例"] == 1 / 3
+    for i in range(1, 6):
+        assert out[f"执行人员{i}"].dtype == object
+
+
+def test_split_people_supports_common_separators():
+    raw = pd.DataFrame(
+        [
+            {"A-执行人员": "张三、李四；王五;赵六", "收入": 100, "B-服务采购比例": 0},
+        ]
+    )
+    out = normalize_raw_data(raw, [])
+    assert out.loc[0, "执行人员1"] == "张三"
+    assert out.loc[0, "执行人员2"] == "李四"
+    assert out.loc[0, "执行人员3"] == "王五"
+    assert out.loc[0, "执行人员4"] == "赵六"
+    assert out.loc[0, "执行人员1执行比例"] == 0.25
+
+
+def test_percent_strings_and_money_strings_are_parsed():
+    """业务方手填 "50%"、"1,000,000" 这类文本时不得静默变成 0/NaN。"""
+    raw = pd.DataFrame(
+        [
+            {"A-执行人员": "张三", "收入": "1,000,000", "B-服务采购比例": "20%", "当前进度": "50%"},
+            {"A-执行人员": "李四", "收入": 200.0, "B-服务采购比例": 0.1, "当前进度": 0.3},
+        ]
+    )
+    out = normalize_raw_data(raw, [])
+    assert out.loc[0, "收入"] == 1_000_000
+    assert out.loc[0, "B-服务采购比例"] == 0.2
+    assert out.loc[0, "当前进度"] == 0.5
+    assert out.loc[1, "收入"] == 200.0
+    assert out.loc[1, "当前进度"] == 0.3
+
+    efficiency = build_efficiency(out, relation=None, warnings=[])
+    person = efficiency["person"].set_index("人员")
+    assert person.loc["张三", "净执行合同额"] == 800_000
+
+
+def test_pure_string_columns_parsed_under_pandas3_str_dtype():
+    """pandas 3 把纯文本列读成 str dtype（非 object），解析逻辑不得因此跳过。"""
+    raw = pd.DataFrame([{"A-执行人员": "张三", "收入": "1,000", "B-服务采购比例": "20%", "当前进度": "50%"}])
+    out = normalize_raw_data(raw, [])
+    assert out.loc[0, "收入"] == 1000
+    assert out.loc[0, "B-服务采购比例"] == 0.2
+    assert out.loc[0, "当前进度"] == 0.5
+
+
+def test_unparseable_money_strings_warn_instead_of_silent_zero():
+    warnings: list[str] = []
+    raw = pd.DataFrame([{"A-执行人员": "张三", "收入": "¥120万", "B-服务采购比例": 0}])
+    out = normalize_raw_data(raw, warnings)
+    assert pd.isna(out.loc[0, "收入"])
+    assert any("无法解析为数字" in w for w in warnings)
+
+
 def test_parse_excel_date_series_handles_serials_strings_datetimes():
     """Excel serial ints must not be misparsed as 1970 epoch nanoseconds."""
     serials = pd.Series([46387, 46022])          # 2026-12-31, 2025-12-31

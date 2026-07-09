@@ -59,12 +59,14 @@ Only if `.venv` is missing or broken:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
 ```
 
 Important for future AI:
 
 - Do not use the system Python for tests or running the app.
 - Always use `.venv\Scripts\python.exe` and `.venv\Scripts\streamlit.exe`.
-- If adding packages, install them into `.venv` and update `requirements.txt`.
+- `requirements.txt` = runtime deps only (used by Streamlit Cloud deploys);
+  `requirements-dev.txt` adds pytest/playwright for local dev. Install dev.
+- If adding packages, install them into `.venv` and update the right file.
 

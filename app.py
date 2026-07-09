@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import io
+
 import pandas as pd
 import streamlit as st
 
@@ -39,7 +41,20 @@ if not uploaded:
     st.info("请上传包含 `实施进度底表` 的 Excel 文件。")
     st.stop()
 
-workbook = load_workbook(uploaded)
+@st.cache_data(show_spinner="正在解析上传文件...")
+def load_workbook_cached(file_bytes: bytes):
+    """Cache parsing so filter clicks don't re-read the Excel on every rerun."""
+    return load_workbook(io.BytesIO(file_bytes))
+
+
+try:
+    workbook = load_workbook_cached(uploaded.getvalue())
+except Exception as exc:  # noqa: BLE001 - 面向业务用户的兜底提示
+    st.error(
+        "文件解析失败，请确认上传的是包含「实施进度底表」的 Excel（.xlsx）。\n\n"
+        f"技术信息：{type(exc).__name__}: {exc}"
+    )
+    st.stop()
 
 # ------------------------------------------------------------------ 筛选
 with st.expander("筛选（默认全部项目）"):
@@ -83,10 +98,18 @@ if raw.empty:
     st.warning("当前筛选条件下没有项目，请调整筛选。")
     st.stop()
 
-metrics = build_all_metrics(raw, workbook.relation)
-kpi = build_kpi_strip(raw)
-delivery = build_delivery_analysis(raw)
-alerts = build_stage_alerts(raw)
+try:
+    metrics = build_all_metrics(raw, workbook.relation)
+    kpi = build_kpi_strip(raw)
+    delivery = build_delivery_analysis(raw)
+    alerts = build_stage_alerts(raw)
+    export_payload = build_export_workbook(raw, metrics, delivery, alerts)
+except Exception as exc:  # noqa: BLE001 - 云端会打码原始堆栈，这里给出可读信息
+    st.error(
+        "指标计算失败，底表中可能存在预期外的数据格式。\n\n"
+        f"技术信息：{type(exc).__name__}: {exc}"
+    )
+    st.stop()
 
 all_warnings = workbook.warnings + metrics.warnings
 if all_warnings:
@@ -101,7 +124,7 @@ with info_col:
 with download_col:
     st.download_button(
         "下载分析结果 Excel",
-        data=build_export_workbook(raw, metrics, delivery, alerts),
+        data=export_payload,
         file_name=f"项目执行管理分析_{pd.Timestamp.now():%Y%m%d}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         use_container_width=True,

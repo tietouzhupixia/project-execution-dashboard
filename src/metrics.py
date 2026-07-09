@@ -4,7 +4,12 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from .data_loader import EXEC_PERSON_COLUMNS, EXEC_RATIO_COLUMNS, parse_excel_date_series
+from .data_loader import (
+    EXEC_PERSON_COLUMNS,
+    EXEC_RATIO_COLUMNS,
+    parse_excel_date_series,
+    split_people,
+)
 
 
 YES = "是"
@@ -265,8 +270,8 @@ def build_efficiency(raw: pd.DataFrame, relation: pd.DataFrame | None, warnings:
         )
         .sort_values("净执行合同额", ascending=False)
     )
-    unit["人均净额（全部）"] = unit["净执行合同额"] / unit["人员数"].replace(0, pd.NA)
-    unit["人均净额（有净额）"] = unit["净执行合同额"] / unit["有净额人数"].replace(0, pd.NA)
+    unit["人均净额（全部）"] = unit["净执行合同额"] / unit["人员数"].where(unit["人员数"] > 0)
+    unit["人均净额（有净额）"] = unit["净执行合同额"] / unit["有净额人数"].where(unit["有净额人数"] > 0)
 
     total = person["净执行合同额"].sum()
     active_count = int((person["净执行合同额"] > 0).sum())
@@ -562,9 +567,7 @@ def explode_region(raw: pd.DataFrame) -> pd.DataFrame:
 
 
 def split_regions(value: object) -> list[str]:
-    if pd.isna(value):
-        return ["未填"]
-    return [part.strip() for part in str(value).replace("，", ",").split(",") if part.strip()] or ["未填"]
+    return split_people(value) or ["未填"]
 
 
 def number_or_zero(value: object) -> float:
