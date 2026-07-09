@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.streamlit/secrets.toml
+data/raw/*
+data/processed/*
+!data/raw/README.md
+!data/processed/README.md
+
+# 真实业务数据与运行产物，不进仓库
+data/sample/*.xlsx
+artifacts/
+logs/
+
