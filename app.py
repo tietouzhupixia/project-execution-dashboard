@@ -17,7 +17,6 @@ from src.charts import (
     render_ratio_bar_chart,
     render_row_label,
     render_section_banner,
-    render_selectable_table,
 )
 from src.data_loader import load_workbook, parse_excel_date_series
 from src.export import build_export_workbook
@@ -222,15 +221,16 @@ def show_unit_detail(unit: str) -> None:
     )
 
 
-def maybe_show_unit_detail(ranking, selected_row: int | None, state_key: str) -> None:
-    """Open the drill-down dialog once per new row selection (avoid reopen loop)."""
-    if selected_row is None:
+def render_unit_detail_buttons(ranking, key_prefix: str) -> None:
+    """每个业务部一个按钮，点击弹明细。按钮事件干净，同一按钮可反复点击。"""
+    if ranking is None or ranking.empty or "业务单元" not in ranking.columns:
         return
-    unit = str(ranking.iloc[selected_row]["业务单元"])
-    marker = (state_key, selected_row, unit)
-    if st.session_state.get("_handled_unit_selection") != marker:
-        st.session_state["_handled_unit_selection"] = marker
-        show_unit_detail(unit)
+    st.caption("点击下方按钮查看该业务部的项目实施进度明细：")
+    units = ranking["业务单元"].tolist()
+    cols = st.columns(min(len(units), 4))
+    for i, unit in enumerate(units):
+        if cols[i % len(cols)].button(str(unit), key=f"{key_prefix}_{i}", use_container_width=True):
+            show_unit_detail(str(unit))
 
 # —— 未验收 · 当年交付
 label_col, body_col = st.columns([1, 9])
@@ -258,11 +258,8 @@ with body_col:
     with g2:
         with st.container(border=True):
             ranking = current["region_deviation_ranking"]
-            selected_row = render_selectable_table(
-                "业务部进度偏差排名", ranking, key="region_rank_current"
-            )
-            st.caption("点击行可查看该业务部的项目实施进度明细。")
-            maybe_show_unit_detail(ranking, selected_row, "region_rank_current")
+            render_metric_table("业务部进度偏差排名", ranking)
+            render_unit_detail_buttons(ranking, "unit_detail_current")
 
 # —— 未验收 · 跨年交付
 label_col, body_col = st.columns([1, 9])

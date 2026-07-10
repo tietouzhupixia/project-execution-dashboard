@@ -205,24 +205,6 @@ def render_metric_table(title: str, data: pd.DataFrame) -> None:
     st.dataframe(format_table_for_display(data), use_container_width=True, hide_index=True)
 
 
-def render_selectable_table(title: str, data: pd.DataFrame, key: str) -> int | None:
-    """Metric table with single-row selection; returns the selected positional row."""
-    st.subheader(title)
-    if data is None or data.empty:
-        st.info("暂无数据")
-        return None
-    event = st.dataframe(
-        format_table_for_display(data),
-        use_container_width=True,
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row",
-        key=key,
-    )
-    rows = event.selection.rows if event is not None and event.selection else []
-    return rows[0] if rows else None
-
-
 def format_table_for_display(data: pd.DataFrame) -> pd.DataFrame:
     """Format numbers for reader-facing dashboard tables."""
     out = data.copy()

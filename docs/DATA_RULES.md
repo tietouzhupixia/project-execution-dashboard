@@ -215,9 +215,13 @@ Business units are derived **dynamically** from the data (comma-split of
 
 ## 13. Region Ranking Drill-down
 
-业务部进度偏差排名表支持行点击：选中某业务部弹出该业务部的项目实施进度明细
-（项目名称/项目经理/当前进度/时间进度/进度偏差/偏差分类/交付状态/预计交付日期）。
-业务部归属沿用逗号拆分包含匹配（多区域项目在每个区域都出现）。
+业务部进度偏差排名表下方为每个业务部提供一个按钮，点击弹出该业务部的项目实施
+进度明细（项目名称/项目经理/当前进度/时间进度/进度偏差/偏差分类/交付状态/
+预计交付日期）。业务部归属沿用逗号拆分包含匹配（多区域项目在每个区域都出现）。
+
+实现说明：不要用 `st.dataframe(on_select=...)` 做点击下钻——dataframe 换 key
+重挂载后首次行选择的 selection 不回传后端（前端已勾选但 dialog 不弹），导致
+“关闭后需再点一次”。改用每业务部一个 `st.button`，按钮事件干净、可反复触发。
 
 ## 14. 人效基础数据 Replication (person base table + data note)
 
