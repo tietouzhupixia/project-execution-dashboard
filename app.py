@@ -200,22 +200,19 @@ with s3:
 
 ref_year_text = f"{delivery['ref_year'] % 100}年"
 
-UNIT_DETAIL_COLUMNS = [
-    "A-项目名称", "A-项目经理", "当前进度", "时间进度",
-    "进度偏差", "进度偏差分类", "交付状态", "预计交付日期",
-]
-
 
 @st.dialog("业务部项目实施进度明细", width="large")
 def show_unit_detail(unit: str) -> None:
     detail = projects_of_unit(raw, unit)
     st.markdown(f"**{unit}** · 共 {len(detail)} 个项目")
-    columns = [c for c in UNIT_DETAIL_COLUMNS if c in detail.columns]
+    # 展示上传的全部原始列（排除系统派生辅助列），保持原始列顺序
+    columns = [c for c in workbook.original_columns if c in detail.columns]
     if detail.empty or not columns:
         st.info("暂无数据")
         return
+    ordered = detail[columns].sort_values("进度偏差") if "进度偏差" in columns else detail[columns]
     st.dataframe(
-        format_table_for_display(detail[columns].sort_values("进度偏差") if "进度偏差" in columns else detail[columns]),
+        format_table_for_display(ordered),
         use_container_width=True,
         hide_index=True,
     )

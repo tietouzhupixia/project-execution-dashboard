@@ -21,6 +21,7 @@ class WorkbookData:
     relation: pd.DataFrame | None
     source_sheet: str
     warnings: list[str]
+    original_columns: list[str]
 
 
 def load_workbook(file: str | BinaryIO) -> WorkbookData:
@@ -28,6 +29,7 @@ def load_workbook(file: str | BinaryIO) -> WorkbookData:
     xls = pd.ExcelFile(file)
     sheet = detect_raw_sheet(xls)
     raw = pd.read_excel(xls, sheet_name=sheet)
+    original_columns = list(raw.columns)  # 上传原始列，排除后续派生的辅助列
     relation = None
     if RELATION_SHEET in xls.sheet_names:
         relation = pd.read_excel(xls, sheet_name=RELATION_SHEET)
@@ -38,7 +40,13 @@ def load_workbook(file: str | BinaryIO) -> WorkbookData:
         warnings.append(f"缺少关键字段：{', '.join(missing)}")
 
     raw = normalize_raw_data(raw, warnings)
-    return WorkbookData(raw=raw, relation=relation, source_sheet=sheet, warnings=warnings)
+    return WorkbookData(
+        raw=raw,
+        relation=relation,
+        source_sheet=sheet,
+        warnings=warnings,
+        original_columns=original_columns,
+    )
 
 
 def detect_raw_sheet(xls: pd.ExcelFile) -> str:

@@ -455,6 +455,35 @@ def test_parse_excel_date_series_handles_serials_strings_datetimes():
     assert pd.isna(parsed.iloc[2])
 
 
+def test_original_columns_excludes_derived_helpers():
+    """弹窗明细按原始上传列展示，排除系统派生的辅助列（DATA_RULES §13）。"""
+    df = pd.DataFrame(
+        [
+            {
+                "A-项目名称": "P1",
+                "A-项目经理区域": "华北业务部",
+                "当前进度": 0.2,
+                "交付状态": "未验收",
+                "启动归档": "是",
+                "A-执行人员": "张三,李四",
+            }
+        ]
+    )
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        df.to_excel(writer, sheet_name="实施进度底表", index=False)
+    buffer.seek(0)
+
+    workbook = load_workbook(buffer)
+    assert workbook.original_columns == list(df.columns)
+    # 派生列进入了 raw，但不在 original_columns
+    assert "启动应归档" in workbook.raw.columns
+    assert "执行比例是否虚拟" in workbook.raw.columns
+    assert "启动应归档" not in workbook.original_columns
+    assert "执行比例是否虚拟" not in workbook.original_columns
+    assert "执行人员1" not in workbook.original_columns
+
+
 def test_load_workbook_with_only_raw_sheet():
     """DATA_RULES §9: a workbook containing only 实施进度底表 must load cleanly."""
     df = pd.DataFrame(
