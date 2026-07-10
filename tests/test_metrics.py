@@ -14,6 +14,8 @@ from src.metrics import (
     build_progress_summary,
     build_stage_alerts,
     filter_projects,
+    month_counts_collapsed,
+    projects_of_unit,
 )
 
 
@@ -352,6 +354,66 @@ def test_percent_strings_and_money_strings_are_parsed():
     efficiency = build_efficiency(out, relation=None, warnings=[])
     person = efficiency["person"].set_index("人员")
     assert person.loc["张三", "净执行合同额"] == 800_000
+
+
+def test_format_table_handles_datetime_columns():
+    """pandas 3 不允许向 datetime 列 fillna 字符串——展示层必须先转字符串。"""
+    from src.charts import format_table_for_display
+
+    data = pd.DataFrame(
+        {
+            "A-项目名称": ["P1", "P2"],
+            "预计交付日期": pd.to_datetime(["2026-12-01", None]),
+        }
+    )
+    out = format_table_for_display(data)
+    assert out.loc[0, "预计交付日期"] == "2026-12-01"
+    assert out.loc[1, "预计交付日期"] == "未填"
+
+
+def test_month_counts_collapsed_groups_future_years():
+    """当年按月、当年之后按整年折叠（DATA_RULES §12）。"""
+    raw = pd.DataFrame(
+        {
+            "预计交付日期": [
+                "2025-12-01",  # 过去年份：保留按月
+                "2026-06-01",
+                "2026-12-01",
+                "2026-12-15",
+                "2027-02-01",  # 未来：折叠成 27年
+                "2027-08-01",
+                "2028-05-01",  # 未来：折叠成 28年
+            ]
+        }
+    )
+    counts = month_counts_collapsed(raw, "预计交付日期", ref_year=2026).set_index("年月")["数量"]
+    assert counts["25年12月"] == 1
+    assert counts["26年06月"] == 1
+    assert counts["26年12月"] == 2
+    assert counts["27年"] == 2
+    assert counts["28年"] == 1
+    assert "27年02月" not in counts.index
+
+    # 到了 2027 年：27 年自动展开按月、28 年仍按年
+    counts_2027 = month_counts_collapsed(raw, "预计交付日期", ref_year=2027).set_index("年月")["数量"]
+    assert counts_2027["27年02月"] == 1
+    assert counts_2027["27年08月"] == 1
+    assert counts_2027["28年"] == 1
+    assert "27年" not in counts_2027.index
+
+
+def test_projects_of_unit_uses_multi_region_membership():
+    raw = pd.DataFrame(
+        [
+            {"A-项目名称": "P1", "A-项目经理区域": "华北业务部", "当前进度": 0.2},
+            {"A-项目名称": "P2", "A-项目经理区域": "华东事业部，华北业务部", "当前进度": 0.5},
+            {"A-项目名称": "P3", "A-项目经理区域": "华东事业部", "当前进度": 0.9},
+        ]
+    )
+    north = projects_of_unit(raw, "华北业务部")
+    assert north["A-项目名称"].tolist() == ["P1", "P2"]
+    east = projects_of_unit(raw, "华东事业部")
+    assert east["A-项目名称"].tolist() == ["P2", "P3"]
 
 
 def test_pure_string_columns_parsed_under_pandas3_str_dtype():

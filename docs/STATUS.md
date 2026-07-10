@@ -60,6 +60,16 @@ Last updated by AI: 2026-07-08 current session.
     render with no error markers; screenshots in `artifacts/screenshots`
     (00_full.png + section_1..4.png).
 
+- 2026-07-09 refinement round:
+  - 预计验收/交付年月分布：当年按月、未来年份折叠为整年（随自然年自动前移，
+    `month_counts_collapsed`，DATA_RULES §12）。
+  - 业务部进度偏差排名表支持行点击下钻：st.dialog 弹出该业务部项目实施进度
+    明细（`projects_of_unit`，DATA_RULES §13）。注意 Streamlit 行选择要点
+    表格最左侧选择列。
+  - 展示层修复：datetime 列先转字符串再 fillna（pandas 3 禁止向 datetime 列
+    填字符串）。
+  - Tests: 25 passed; Playwright verified collapsed bars and dialog drill-down.
+
 ## In Progress
 
 - Metrics are implemented in code and validated against the current sample workbook; still need validation with multiple uploaded workbooks.

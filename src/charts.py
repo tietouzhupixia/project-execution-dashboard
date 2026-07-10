@@ -205,11 +205,33 @@ def render_metric_table(title: str, data: pd.DataFrame) -> None:
     st.dataframe(format_table_for_display(data), use_container_width=True, hide_index=True)
 
 
+def render_selectable_table(title: str, data: pd.DataFrame, key: str) -> int | None:
+    """Metric table with single-row selection; returns the selected positional row."""
+    st.subheader(title)
+    if data is None or data.empty:
+        st.info("暂无数据")
+        return None
+    event = st.dataframe(
+        format_table_for_display(data),
+        use_container_width=True,
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=key,
+    )
+    rows = event.selection.rows if event is not None and event.selection else []
+    return rows[0] if rows else None
+
+
 def format_table_for_display(data: pd.DataFrame) -> pd.DataFrame:
     """Format numbers for reader-facing dashboard tables."""
     out = data.copy()
     format_metric_value_column(out)
     for col in out.columns:
+        if pd.api.types.is_datetime64_any_dtype(out[col]):
+            # datetime 列先转字符串：pandas 3 不允许向 datetime 列填字符串
+            out[col] = out[col].dt.strftime("%Y-%m-%d").fillna("未填")
+            continue
         if out[col].dtype == object:
             out[col] = out[col].fillna("未填")
             continue

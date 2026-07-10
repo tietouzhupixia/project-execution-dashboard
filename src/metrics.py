@@ -109,8 +109,8 @@ def build_project_overview(raw: pd.DataFrame) -> dict:
         "progress_stage": value_counts(raw, "进度分类"),
         "unaccepted_stage": value_counts(unaccepted_rows, "进度分类"),
         "deviation_type": value_counts(raw, "进度偏差分类"),
-        "estimated_delivery_month": month_counts(raw, "预计交付日期"),
-        "estimated_acceptance_month": month_counts(raw, "预计验收日期（若已签约，默认经法）"),
+        "estimated_delivery_month": month_counts_collapsed(raw, "预计交付日期"),
+        "estimated_acceptance_month": month_counts_collapsed(raw, "预计验收日期（若已签约，默认经法）"),
     }
 
 
@@ -553,6 +553,34 @@ def month_counts(raw: pd.DataFrame, column: str) -> pd.DataFrame:
         return pd.DataFrame(columns=["年月", "数量"])
     months = parse_excel_date_series(raw[column]).dt.strftime("%y年%m月").fillna("未填")
     return months.value_counts().rename_axis("年月").reset_index(name="数量")
+
+
+def month_counts_collapsed(raw: pd.DataFrame, column: str, ref_year: int | None = None) -> pd.DataFrame:
+    """当年（及以前）按月、当年之后的年份折叠为整年（DATA_RULES §12）。"""
+    if column not in raw.columns:
+        return pd.DataFrame(columns=["年月", "数量"])
+    ref_year = ref_year or pd.Timestamp.now().year
+    dates = parse_excel_date_series(raw[column])
+
+    def label(d: object) -> str:
+        if pd.isna(d):
+            return "未填"
+        if d.year > ref_year:
+            return f"{d.year % 100}年"
+        return d.strftime("%y年%m月")
+
+    labels = dates.map(label)
+    return labels.value_counts().rename_axis("年月").reset_index(name="数量")
+
+
+def projects_of_unit(raw: pd.DataFrame, unit: str) -> pd.DataFrame:
+    """某业务部的项目子集；多区域项目按包含匹配归入每个区域（DATA_RULES §13）。"""
+    if "A-项目经理区域" not in raw.columns:
+        return raw.iloc[0:0].copy()
+    mask = raw["A-项目经理区域"].map(
+        lambda v: unit in split_regions(v) if pd.notna(v) else False
+    )
+    return raw.loc[mask].copy()
 
 
 def explode_region(raw: pd.DataFrame) -> pd.DataFrame:

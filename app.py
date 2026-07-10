@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from src.charts import (
+    format_table_for_display,
     inject_css,
     render_bar_chart,
     render_big_number,
@@ -16,6 +17,7 @@ from src.charts import (
     render_ratio_bar_chart,
     render_row_label,
     render_section_banner,
+    render_selectable_table,
 )
 from src.data_loader import load_workbook, parse_excel_date_series
 from src.export import build_export_workbook
@@ -26,6 +28,7 @@ from src.metrics import (
     build_stage_alerts,
     discover_business_units,
     filter_projects,
+    projects_of_unit,
 )
 
 
@@ -198,6 +201,37 @@ with s3:
 
 ref_year_text = f"{delivery['ref_year'] % 100}年"
 
+UNIT_DETAIL_COLUMNS = [
+    "A-项目名称", "A-项目经理", "当前进度", "时间进度",
+    "进度偏差", "进度偏差分类", "交付状态", "预计交付日期",
+]
+
+
+@st.dialog("业务部项目实施进度明细", width="large")
+def show_unit_detail(unit: str) -> None:
+    detail = projects_of_unit(raw, unit)
+    st.markdown(f"**{unit}** · 共 {len(detail)} 个项目")
+    columns = [c for c in UNIT_DETAIL_COLUMNS if c in detail.columns]
+    if detail.empty or not columns:
+        st.info("暂无数据")
+        return
+    st.dataframe(
+        format_table_for_display(detail[columns].sort_values("进度偏差") if "进度偏差" in columns else detail[columns]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+
+def maybe_show_unit_detail(ranking, selected_row: int | None, state_key: str) -> None:
+    """Open the drill-down dialog once per new row selection (avoid reopen loop)."""
+    if selected_row is None:
+        return
+    unit = str(ranking.iloc[selected_row]["业务单元"])
+    marker = (state_key, selected_row, unit)
+    if st.session_state.get("_handled_unit_selection") != marker:
+        st.session_state["_handled_unit_selection"] = marker
+        show_unit_detail(unit)
+
 # —— 未验收 · 当年交付
 label_col, body_col = st.columns([1, 9])
 with label_col:
@@ -223,7 +257,12 @@ with body_col:
             render_bar_chart("预计交付年月", current["delivery_month"], "年月", "数量")
     with g2:
         with st.container(border=True):
-            render_metric_table("业务部进度偏差排名", current["region_deviation_ranking"])
+            ranking = current["region_deviation_ranking"]
+            selected_row = render_selectable_table(
+                "业务部进度偏差排名", ranking, key="region_rank_current"
+            )
+            st.caption("点击行可查看该业务部的项目实施进度明细。")
+            maybe_show_unit_detail(ranking, selected_row, "region_rank_current")
 
 # —— 未验收 · 跨年交付
 label_col, body_col = st.columns([1, 9])

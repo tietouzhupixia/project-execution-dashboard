@@ -205,7 +205,21 @@ Three summary blocks, replicating the sheet's left-side formulas:
 Business units are derived **dynamically** from the data (comma-split of
 `A-项目经理区域`, first-seen order), never hardcoded.
 
-## 12. 人效基础数据 Replication (person base table + data note)
+## 12. Month/Year Collapsed Distributions (2026-07-09 requirement)
+
+预计验收/预计交付年月分布图的横轴粒度随自然年动态变化：
+
+- 当年（`pd.Timestamp.now().year`）及更早：按 `%y年%m月` 展示。
+- 当年之后的年份：合并为整年 `%y年`（如 `27年`、`28年`）。
+- 到了下一个自然年自动前移：2027 年时 27 年按月、28 年及以后按年。
+
+## 13. Region Ranking Drill-down
+
+业务部进度偏差排名表支持行点击：选中某业务部弹出该业务部的项目实施进度明细
+（项目名称/项目经理/当前进度/时间进度/进度偏差/偏差分类/交付状态/预计交付日期）。
+业务部归属沿用逗号拆分包含匹配（多区域项目在每个区域都出现）。
+
+## 14. 人效基础数据 Replication (person base table + data note)
 
 Columns: `人员`, `净执行合同额`, `所属区域/业务单元`, `数据说明`.
 
