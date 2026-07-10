@@ -455,33 +455,26 @@ def test_parse_excel_date_series_handles_serials_strings_datetimes():
     assert pd.isna(parsed.iloc[2])
 
 
-def test_original_columns_excludes_derived_helpers():
-    """弹窗明细按原始上传列展示，排除系统派生的辅助列（DATA_RULES §13）。"""
-    df = pd.DataFrame(
-        [
-            {
-                "A-项目名称": "P1",
-                "A-项目经理区域": "华北业务部",
-                "当前进度": 0.2,
-                "交付状态": "未验收",
-                "启动归档": "是",
-                "A-执行人员": "张三,李四",
-            }
-        ]
-    )
-    buffer = io.BytesIO()
-    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        df.to_excel(writer, sheet_name="实施进度底表", index=False)
-    buffer.seek(0)
+def test_display_columns_excludes_derived_helpers_keeps_original_order():
+    """明细展示列 = 原始列（保序），排除系统派生辅助列（DATA_RULES §13）。"""
+    from src.data_loader import display_columns
 
-    workbook = load_workbook(buffer)
-    assert workbook.original_columns == list(df.columns)
-    # 派生列进入了 raw，但不在 original_columns
-    assert "启动应归档" in workbook.raw.columns
-    assert "执行比例是否虚拟" in workbook.raw.columns
-    assert "启动应归档" not in workbook.original_columns
-    assert "执行比例是否虚拟" not in workbook.original_columns
-    assert "执行人员1" not in workbook.original_columns
+    original = ["A-项目名称", "A-项目经理区域", "当前进度", "交付状态", "启动归档", "A-执行人员"]
+    df = pd.DataFrame([{c: "x" for c in original}])
+    df["当前进度"] = 0.2
+    df["启动归档"] = "是"
+    normalized = normalize_raw_data(df, [])
+
+    # 派生列确实进入了 raw
+    assert "启动应归档" in normalized.columns
+    assert "执行比例是否虚拟" in normalized.columns
+
+    cols = display_columns(normalized)
+    assert cols[: len(original)] == original  # 原始列在前，保持顺序
+    assert "启动应归档" not in cols
+    assert "启动已归档" not in cols
+    assert "临近中期已归档" not in cols
+    assert "执行比例是否虚拟" not in cols
 
 
 def test_load_workbook_with_only_raw_sheet():

@@ -223,6 +223,12 @@ Business units are derived **dynamically** from the data (comma-split of
 重挂载后首次行选择的 selection 不回传后端（前端已勾选但 dialog 不弹），导致
 “关闭后需再点一次”。改用每业务部一个 `st.button`，按钮事件干净、可反复触发。
 
+弹窗展示该业务部项目的全部原始列（`display_columns`：按列顺序排除
+`DERIVED_HELPER_COLUMNS` = 执行比例是否虚拟 + 6 个派生应/已归档列）。不要把
+“原始列清单”存进被 `@st.cache_data` 缓存的 dataclass：缓存键按函数体哈希，
+函数体不变时会复用旧版本序列化的对象，新增字段会 AttributeError。用固定排除
+集合从当前 DataFrame 现算，天然免疫缓存陈旧问题。
+
 ## 14. 人效基础数据 Replication (person base table + data note)
 
 Columns: `人员`, `净执行合同额`, `所属区域/业务单元`, `数据说明`.

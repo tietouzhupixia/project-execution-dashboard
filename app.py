@@ -18,7 +18,7 @@ from src.charts import (
     render_row_label,
     render_section_banner,
 )
-from src.data_loader import load_workbook, parse_excel_date_series
+from src.data_loader import display_columns, load_workbook, parse_excel_date_series
 from src.export import build_export_workbook
 from src.metrics import (
     build_all_metrics,
@@ -206,7 +206,7 @@ def show_unit_detail(unit: str) -> None:
     detail = projects_of_unit(raw, unit)
     st.markdown(f"**{unit}** · 共 {len(detail)} 个项目")
     # 展示上传的全部原始列（排除系统派生辅助列），保持原始列顺序
-    columns = [c for c in workbook.original_columns if c in detail.columns]
+    columns = display_columns(detail)
     if detail.empty or not columns:
         st.info("暂无数据")
         return
