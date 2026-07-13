@@ -229,7 +229,23 @@ Business units are derived **dynamically** from the data (comma-split of
 函数体不变时会复用旧版本序列化的对象，新增字段会 AttributeError。用固定排除
 集合从当前 DataFrame 现算，天然免疫缓存陈旧问题。
 
-## 14. 人效基础数据 Replication (person base table + data note)
+## 14. Formula (Audit) Export
+
+`src/export_formulas.py` `build_formula_workbook` 生成核算版工作簿：分析单元格为
+活公式（`=SUMPRODUCT/COUNTA/SUMIF...`）指向「实施进度底表」，改底表数据自动重算，
+供人工核对口径。要点：
+
+- 公式引用底表列的**列字母按导出布局动态计算**（`get_column_letter`），支持任意
+  列顺序；行范围用实际数据行数 `$2:$<n+1>`。
+- 归档动作列（应/已归档）在底表内用 `IF(...)` 公式重算。
+- **禁止在 SUMPRODUCT 内对区域使用 `IFERROR(range,0)`**：Excel 会把它塌成标量而非
+  逐元素求值，导致整列因子被当成单一值（实测公司净额算成 sum(收入) 而非
+  sum(收入×(1-采购))）。导出数据无错误值、空单元格在算术中即 0，直接去掉 IFERROR。
+- 已用真实文件 + 真 Excel 重算交叉校验：项目数/未验收（SUMPRODUCT-SEARCH）、
+  视角一二（SUMPRODUCT）、人效净额（SUMPRODUCT）、业务单元净额（SUMIF）全部与
+  Python 指标一致。
+
+## 15. 人效基础数据 Replication (person base table + data note)
 
 Columns: `人员`, `净执行合同额`, `所属区域/业务单元`, `数据说明`.
 

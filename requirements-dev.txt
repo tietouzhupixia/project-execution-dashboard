@@ -1,3 +1,5 @@
 -r requirements.txt
 pytest>=8.0
 playwright>=1.61
+# 仅用于本地"用真 Excel 重算校验导出公式"的核对脚本（Windows），运行/测试不依赖
+pywin32>=306; platform_system == "Windows"

@@ -20,6 +20,7 @@ from src.charts import (
 )
 from src.data_loader import display_columns, load_workbook, parse_excel_date_series
 from src.export import build_export_workbook
+from src.export_formulas import build_formula_workbook
 from src.metrics import (
     build_all_metrics,
     build_delivery_analysis,
@@ -106,6 +107,7 @@ try:
     delivery = build_delivery_analysis(raw)
     alerts = build_stage_alerts(raw)
     export_payload = build_export_workbook(raw, metrics, delivery, alerts)
+    formula_payload = build_formula_workbook(raw, discover_business_units(raw), metrics.efficiency["person"])
 except Exception as exc:  # noqa: BLE001 - 云端会打码原始堆栈，这里给出可读信息
     st.error(
         "指标计算失败，底表中可能存在预期外的数据格式。\n\n"
@@ -119,17 +121,29 @@ if all_warnings:
         for warning in all_warnings:
             st.warning(warning)
 
-info_col, download_col = st.columns([3, 1])
+info_col, dl_col1, dl_col2 = st.columns([2, 1, 1])
 with info_col:
     scope = f"筛选后 {len(raw)} / 共 {len(workbook.raw)}" if is_filtered else f"{len(raw)}"
     st.caption(f"识别底表：{workbook.source_sheet}；项目数：{scope}")
-with download_col:
+today = f"{pd.Timestamp.now():%Y%m%d}"
+mime_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+with dl_col1:
     st.download_button(
-        "下载分析结果 Excel",
+        "下载分析结果",
         data=export_payload,
-        file_name=f"项目执行管理分析_{pd.Timestamp.now():%Y%m%d}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        file_name=f"项目执行管理分析_{today}.xlsx",
+        mime=mime_xlsx,
         use_container_width=True,
+        help="数值版：直接查看计算好的结果表。",
+    )
+with dl_col2:
+    st.download_button(
+        "下载核算版（含公式）",
+        data=formula_payload,
+        file_name=f"项目执行管理分析_核算版_{today}.xlsx",
+        mime=mime_xlsx,
+        use_container_width=True,
+        help="公式版：分析单元格为活公式，指向实施进度底表，可人工核对计算逻辑。",
     )
 if is_filtered:
     st.info("当前为筛选视图：以下所有图表、表格与导出文件均按筛选后的项目计算。")

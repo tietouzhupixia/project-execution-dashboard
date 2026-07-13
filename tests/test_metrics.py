@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.data_loader import load_workbook, normalize_raw_data, parse_excel_date_series
 from src.export import build_export_workbook
+from src.export_formulas import build_formula_workbook
 from src.metrics import (
     build_all_metrics,
     build_archive_view_1,
@@ -431,6 +432,67 @@ def test_unparseable_money_strings_warn_instead_of_silent_zero():
     out = normalize_raw_data(raw, warnings)
     assert pd.isna(out.loc[0, "收入"])
     assert any("无法解析为数字" in w for w in warnings)
+
+
+def test_formula_workbook_uses_live_formulas_and_dynamic_column_letters():
+    """导出的核算版含活公式，且列字母随实际列顺序动态计算（支持乱序）。"""
+    from openpyxl import load_workbook as xl_load
+    from openpyxl.utils import get_column_letter
+
+    # 故意打乱列顺序：当前进度、收入不在原始位置
+    raw = normalize_raw_data(
+        pd.DataFrame(
+            [
+                {"交付状态": "未验收", "A-项目经理区域": "华北业务部", "A-项目名称": "P1",
+                 "当前进度": 0.2, "启动归档": "是", "中期归档": "否", "临近终期归档": "否",
+                 "收入": 100.0, "B-服务采购比例": 0.0, "A-执行人员": "张三"},
+                {"交付状态": "已验收", "A-项目经理区域": "华东事业部", "A-项目名称": "P2",
+                 "当前进度": 0.95, "启动归档": "是", "中期归档": "是", "临近终期归档": "是",
+                 "收入": 200.0, "B-服务采购比例": 0.1, "A-执行人员": "李四"},
+            ]
+        ),
+        [],
+    )
+    eff = build_efficiency(raw, relation=None, warnings=[])
+    payload = build_formula_workbook(raw, ["华北业务部", "华东事业部"], eff["person"])
+
+    wb = xl_load(io.BytesIO(payload))  # 默认读公式文本
+    for sheet in ["实施进度底表", "进度信息分析", "人效基础数据", "人效分析"]:
+        assert sheet in wb.sheetnames
+
+    base = wb["实施进度底表"]
+    header = [c.value for c in base[1]]
+    progress_letter = get_column_letter(header.index("当前进度") + 1)
+    income_letter = get_column_letter(header.index("收入") + 1)
+
+    # 归档动作列写成公式，引用当前进度列
+    qidong_col = get_column_letter(header.index("启动应归档") + 1)
+    action_formula = base[f"{qidong_col}2"].value
+    assert isinstance(action_formula, str) and action_formula.startswith("=")
+    assert f"{progress_letter}2" in action_formula
+
+    # 视角公式引用当前进度列字母（动态）
+    prog = wb["进度信息分析"]
+    all_formulas = "\n".join(
+        str(c.value) for row in prog.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")
+    )
+    assert "SUMPRODUCT" in all_formulas
+    assert f"${progress_letter}$2" in all_formulas
+
+    # 人效基础数据净额公式引用收入列字母
+    effbase = wb["人效基础数据"]
+    net_formula = effbase["B2"].value
+    assert net_formula.startswith("=")
+    assert f"${income_letter}$2" in net_formula
+    # 不得在 SUMPRODUCT 内对区域用 IFERROR：Excel 会把它塌成标量致算错
+    assert "IFERROR" not in net_formula
+
+    # 人效分析公司净额引用人效基础数据
+    effsheet = wb["人效分析"]
+    company_formulas = "\n".join(
+        str(c.value) for row in effsheet.iter_rows() for c in row if isinstance(c.value, str)
+    )
+    assert "人效基础数据" in company_formulas
 
 
 def test_parse_excel_date_series_handles_serials_strings_datetimes():
