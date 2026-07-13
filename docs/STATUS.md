@@ -1,6 +1,18 @@
 # Status
 
-Last updated by AI: 2026-07-08 current session.
+Last updated by AI: 2026-07-13.
+
+## 当前状态速览（2026-07-13）
+
+- 应用已上线 Streamlit Community Cloud，GitHub 仓库
+  `github.com/tietouzhupixia/project-execution-dashboard`（main = 最新提交）。
+  推送后云端自动重新部署；改 `src/*.py` 后若报旧错，去 Manage app → Reboot app。
+- 云端运行环境为 Python 3.14 + pandas 3.x，比本地新；已针对 pandas 3 做多处加固
+  （见「2026-07-13」块与 AI_HANDOFF「pandas 3 兼容」）。
+- 功能齐全：四章节 BI 报表、四维筛选、两个下载按钮（数值版 + 含公式核算版）、
+  业务部明细下钻弹窗。测试 27 passed；核算版公式已用真 Excel 重算校验与 Python 一致。
+- 运行/测试须用 `.venv`；运行依赖在 `requirements.txt`，开发工具在
+  `requirements-dev.txt`（云端只装前者）。
 
 ## Done
 
@@ -70,11 +82,6 @@ Last updated by AI: 2026-07-08 current session.
     填字符串）。
   - Tests: 25 passed; Playwright verified collapsed bars and dialog drill-down.
 
-## In Progress
-
-- Metrics are implemented in code and validated against the current sample workbook; still need validation with multiple uploaded workbooks.
-- Local Streamlit process is running from `.venv`.
-
 - 2026-07-09 filters + export + section-3 chart:
   - Top filter bar (业务单元/项目经理/进度阶段/预计交付月, empty = all); the whole
     page and the export recompute on the filtered subset, with a visible notice.
@@ -87,13 +94,34 @@ Last updated by AI: 2026-07-08 current session.
   - Test suite: 17 passed. Playwright checks: sections render, download button
     present, applying a unit filter shows 筛选后 13/46 and recomputes the page.
 
+- 2026-07-13 部署上云 + pandas3 加固 + 下钻 + 核算版导出:
+  - 部署到 Streamlit Cloud，代码推 GitHub（见「当前状态速览」）。
+  - 修复云端崩溃（AttributeError/ImportError/TypeError 系列，根因见 AI_HANDOFF
+    「pandas 3 兼容」）：执行人员列全空被读成 float64 时先转 object；纯文本列用
+    `not is_numeric_dtype` 判断而非 dtype==object；`pd.Series(pd.NA,float64)` 改
+    `float('nan')`；百分号/千分位字符串解析；金额无法解析改为警告而非静默 0。
+  - 上传解析加 `st.cache_data`；load 与指标/导出计算均 try/except 给可读错误
+    （云端会打码原始堆栈）。
+  - 业务部明细下钻：改用每业务部一个 `st.button`（弃用 `st.dataframe` 行选择，
+    换 key 重挂载后首击 selection 不回传，导致“关闭后要再点一次”）；弹窗展示
+    该业务部全部原始列（`display_columns` 排除 `DERIVED_HELPER_COLUMNS`）。
+  - 不把“原始列清单”存进被 `@st.cache_data` 缓存的 dataclass（缓存键按函数体哈希，
+    旧序列化对象缺新字段会 AttributeError）——改成从当前 DataFrame 现算。
+  - 新增“下载核算版（含公式）”：`src/export_formulas.py` 生成活公式工作簿，列字母
+    动态计算；SUMPRODUCT 内禁用 `IFERROR(range,0)`（Excel 会塌成标量算错）。
+    已用真 Excel 重算与 Python 交叉校验全部一致。
+  - Test suite: 27 passed. Playwright smoke: 四章节渲染无错、两个下载按钮、下钻
+    弹窗开-关-再开循环正常。
+
+## In Progress
+
+- 需用 2-3 份不同来源的真实底表进一步验证（目前主要用样例 + 用户实际文件各一份）。
+
 ## Not Started
 
-- Deployment to a server.
-- Real business user acceptance testing.
-- Security/access control.
-- Column-alias mapping for raw files whose field names differ from the current
-  workbook (column reorder/extra columns are handled; renamed columns are not).
+- 正式访问控制（Streamlit Cloud 应用为公网可访问；如需限制，用 app 的 viewer 白名单）。
+- 业务用户正式验收（UAT）。
+- 列名别名映射：字段被重命名的文件仍会当作缺列处理（列乱序/增列已支持，改名未支持）。
 
 ## Known Risks
 
