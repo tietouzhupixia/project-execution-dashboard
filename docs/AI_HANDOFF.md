@@ -371,10 +371,13 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
 - Chart titles are rendered outside Plotly so they can wrap without clipping. Pie percentages are
   inside slices; full labels remain in the bottom legend and hover text. Pie drill-down still uses
   `streamlit-plotly-events` because native Streamlit pie selection was unreliable.
+- The upstream click component does not enable React Plotly's resize handler. Keep
+  `src/responsive_plotly_events.py`: it reuses the installed frontend in a temporary directory and
+  adds `useResizeHandler`, so the inner SVG follows iframe/card width and remains centered.
 - Below 1200px cards may wrap; below 900px main cards become single-column. Custom metric tables
   use their own horizontal scroll instead of causing document-level overflow.
-- `scripts/responsive_ui_check.py` checks equivalent 80/100/125/150/175% browser zoom widths,
-  page overflow, table overflow behavior, and pie click-to-detail.
+- `scripts/responsive_ui_check.py` checks equivalent 80/100/125/150/175/200% browser zoom widths,
+  actual pie-slice bounds and center, page/table overflow, and pie click-to-detail.
 
 ## Verification Done
 

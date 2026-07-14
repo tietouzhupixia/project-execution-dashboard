@@ -407,6 +407,8 @@ as normalized text, and allocation uses `SUMIF` over those text keys.
 
 - 图表标题放在 Plotly 图形外部，可自动换行，不再被图形画布截断。
 - 饼图把百分比放在扇区内、完整名称放在底部图例和悬浮提示中；点击扇区下钻保持不变。
+- `src/responsive_plotly_events.py` 为点击组件启用 Plotly resize handler；卡片宽度改变时，
+  内部 SVG 会重新计算宽度，饼图随容器缩小并始终保持水平居中。
 - 页面宽度低于 1200px 时卡片允许换行，低于 900px 时主要卡片改为单列。
 - 自定义指标表宽度不足时只在表格内部横向滚动，不产生整个页面的横向滚动条。
 

@@ -17,7 +17,9 @@ VIEWPORTS = {
     "125": 1152,
     "150": 960,
     "175": 823,
+    "200": 720,
 }
+PIE_SELECTOR = 'iframe[title="src.responsive_plotly_events.responsive_plotly_events"]'
 
 
 def assert_inside(inner: dict, outer: dict, label: str) -> None:
@@ -27,6 +29,37 @@ def assert_inside(inner: dict, outer: dict, label: str) -> None:
         or inner["x"] + inner["width"] > outer["x"] + outer["width"] + tolerance
     ):
         raise AssertionError(f"{label} overflows its card: inner={inner}, outer={outer}")
+
+
+def assert_pie_centered(card, iframe, label: str) -> None:
+    """Check the rendered slices, not only the responsive iframe shell."""
+    frame = card.frame_locator(PIE_SELECTOR)
+    paths = frame.locator(".slice path")
+    paths.first.wait_for(state="visible", timeout=15000)
+    boxes = [paths.nth(index).bounding_box() for index in range(paths.count())]
+    boxes = [box for box in boxes if box is not None]
+    if not boxes:
+        raise AssertionError(f"{label} has no visible pie slices")
+
+    left = min(box["x"] for box in boxes)
+    right = max(box["x"] + box["width"] for box in boxes)
+    top = min(box["y"] for box in boxes)
+    bottom = max(box["y"] + box["height"] for box in boxes)
+    iframe_box = iframe.bounding_box()
+    pie_center = (left + right) / 2
+    frame_center = iframe_box["x"] + iframe_box["width"] / 2
+    tolerance = max(14, iframe_box["width"] * 0.035)
+    if abs(pie_center - frame_center) > tolerance:
+        raise AssertionError(
+            f"{label} is not centered: pie_center={pie_center}, frame_center={frame_center}"
+        )
+    if (
+        left < iframe_box["x"] - 2
+        or right > iframe_box["x"] + iframe_box["width"] + 2
+        or top < iframe_box["y"] - 2
+        or bottom > iframe_box["y"] + iframe_box["height"] + 2
+    ):
+        raise AssertionError(f"{label} slices are clipped by the iframe")
 
 
 with sync_playwright() as p:
@@ -46,9 +79,10 @@ with sync_playwright() as p:
         pie_title.scroll_into_view_if_needed()
         page.wait_for_timeout(500)
         card = pie_title.locator('xpath=ancestor::*[@data-testid="stColumn"][1]')
-        pie = card.locator('iframe[title="streamlit_plotly_events.plotly_events"]').first
+        pie = card.locator(PIE_SELECTOR).first
         pie.wait_for(timeout=15000)
         assert_inside(pie.bounding_box(), card.bounding_box(), f"pie at {zoom}%")
+        assert_pie_centered(card, pie, f"pie at {zoom}%")
         assert_inside(pie_title.bounding_box(), card.bounding_box(), f"pie title at {zoom}%")
         page.screenshot(path=str(OUT / f"delivery_pie_{zoom}.png"), full_page=False)
 
@@ -100,7 +134,7 @@ with sync_playwright() as p:
     pie_title = page.get_by_text("进度偏差类型分布（在执行项目）", exact=True)
     pie_title.scroll_into_view_if_needed()
     pie_frame = page.frame_locator(
-        'iframe[title="streamlit_plotly_events.plotly_events"]'
+        PIE_SELECTOR
     ).first
     pie_frame.locator(".slice path").first.click(force=True)
     dialog = page.locator('[role="dialog"]')
@@ -110,7 +144,7 @@ with sync_playwright() as p:
 
     print("workbook=", WORKBOOK)
     print("viewports=", VIEWPORTS)
-    print("responsive_pie_iframes=", page.locator('iframe[title="streamlit_plotly_events.plotly_events"]').count())
+    print("responsive_pie_iframes=", page.locator(PIE_SELECTOR).count())
     print("pie_click=", True)
     print("metric_table_layout=", table_layout)
     browser.close()

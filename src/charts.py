@@ -6,7 +6,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-from streamlit_plotly_events import plotly_events
+from src.responsive_plotly_events import plotly_events
 
 # 参考截图配色：蓝 / 黄 / 绿 / 红 / 浅蓝 / 橙
 PALETTE = ["#3370FF", "#FFC60A", "#34C724", "#F54A45", "#7FB2FF", "#FF8800"]
@@ -432,11 +432,7 @@ def _render_clickable_pie(
     widget_key = f"{key}_click_{generation}"
     events = plotly_events(
         fig,
-        click_event=True,
-        select_event=False,
-        hover_event=False,
         override_height=320,
-        override_width="100%",
         key=widget_key,
     )
     if events:

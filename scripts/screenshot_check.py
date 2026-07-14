@@ -149,7 +149,7 @@ with sync_playwright() as p:
     dialog.wait_for(state="hidden", timeout=10000)
 
     # Drill-down regression: the same pie slice must open again after closing.
-    pie_component = page.frame_locator('iframe[title="streamlit_plotly_events.plotly_events"]').first
+    pie_component = page.frame_locator('iframe[title="src.responsive_plotly_events.responsive_plotly_events"]').first
     first_pie_slice = pie_component.locator('.slice path').nth(1)
     first_pie_slice.scroll_into_view_if_needed()
     first_pie_slice.click(force=True)
@@ -176,7 +176,7 @@ with sync_playwright() as p:
     dialog.locator('button[aria-label="Close"]').click()
     dialog.wait_for(state="hidden", timeout=10000)
 
-    pie_component = page.frame_locator('iframe[title="streamlit_plotly_events.plotly_events"]').first
+    pie_component = page.frame_locator('iframe[title="src.responsive_plotly_events.responsive_plotly_events"]').first
     first_pie_slice = pie_component.locator('.slice path').nth(1)
     first_pie_slice.click(force=True)
     dialog.wait_for(state="visible", timeout=15000)
