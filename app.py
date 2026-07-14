@@ -198,7 +198,7 @@ def render_download_bar(
             formula_name = f"26年人均净合同额_人员3口径_核算版_{today}.xlsx"
             formula_help = (
                 "公式版：包含全部 5 张 output_、5 张 calculation_ 和 3 张 input_；"
-                "橙色表头与浅黄色单元格为活公式。"
+                "只需编辑 input_ 表即可在 Excel 内离线重算；支持预留的新增行。"
             )
         else:
             value_label = "下载分析结果"

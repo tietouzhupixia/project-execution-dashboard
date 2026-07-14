@@ -387,20 +387,25 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
     project = workbook["calculation_项目净额明细"]
     allocation = workbook["calculation_人员分摊明细"]
     personnel3 = workbook["calculation_人员3名单"]
+    match_sheet = workbook["calculation_外委子项目匹配"]
     company = workbook["output_公司层面"]
     person = workbook["output_人员层面"]
     checks = workbook["calculation_核验"]
 
     project_headers = {cell.value: cell.column for cell in project[1]}
     allocation_headers = {cell.value: cell.column for cell in allocation[1]}
+    match_headers = {cell.value: cell.column for cell in match_sheet[1]}
     base_column = project_headers["净额取数基数"]
     allocation_amount_column = allocation_headers["项目26年净执行合同额"]
 
     assert workbook.sheetnames == VALUE_SHEETS
-    assert project["A2"].value.startswith("=IF('input_实施进度表'")
+    assert project["A2"].value.startswith("=IF(AND('input_实施进度表'")
     assert '&""' in project["A2"].value
-    assert allocation["A2"].value.startswith("='calculation_项目净额明细'")
-    assert personnel3["A2"].value.startswith("='input_人员关系表'")
+    assert allocation["A2"].value.startswith("=IF('input_实施进度表'")
+    assert "'calculation_项目净额明细'!A2" in allocation["A2"].value
+    assert personnel3["A2"].value.startswith("=IF(OR('input_人员关系表'")
+    assert "COUNTIF" in personnel3["A2"].value
+    assert "需人工确认" in match_sheet.cell(2, match_headers["匹配状态"]).value
     assert person["A2"].value.startswith("='calculation_人员3名单'")
     assert project.cell(2, base_column).value.startswith("=IF(")
     assert "SUMIF('calculation_项目净额明细'" in allocation.cell(2, allocation_amount_column).value
@@ -412,13 +417,33 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
 
     formula_required = [
         sheet for sheet in VALUE_SHEETS
-        if sheet.startswith(("calculation_", "output_")) and sheet != "output_异常检查"
+        if sheet.startswith(("calculation_", "output_"))
     ]
     for sheet in formula_required:
-        formulas = [
-            cell.value
+        non_formulas = [
+            cell.coordinate
             for row in workbook[sheet].iter_rows(min_row=2)
             for cell in row
-            if isinstance(cell.value, str) and cell.value.startswith("=")
+            if not (isinstance(cell.value, str) and cell.value.startswith("="))
         ]
-        assert formulas, f"{sheet} should contain live formulas"
+        assert not non_formulas, f"{sheet} contains non-formula data cells: {non_formulas[:5]}"
+
+    # The formula export is a standalone offline template, not a fixed snapshot.
+    assert workbook["input_实施进度表"].max_row == 201
+    assert workbook["calculation_项目净额明细"].max_row == 201
+    assert workbook["input_外委更新金额"].max_row == 201
+    assert workbook["calculation_外委子项目匹配"].max_row == 201
+    assert workbook["calculation_人员分摊明细"].max_row == 1001
+    assert workbook["output_部门层面"].max_row == 101
+    assert workbook["output_人员层面"].max_row == 101
+    assert workbook["output_异常检查"].max_row == 3001
+    assert workbook["calculation_项目净额明细"]["A201"].value.startswith("=IF(AND(")
+    assert workbook["calculation_人员分摊明细"]["A1001"].value.startswith("=IF(")
+
+    outsource_input = workbook["input_外委更新金额"]
+    outsource_headers = [cell.value for cell in outsource_input[1]]
+    for name in ["确认匹配状态", "确认对应实施项目编号", "导出时最高匹配度", "确认说明"]:
+        assert name in outsource_headers
+        column = outsource_headers.index(name) + 1
+        assert outsource_input.cell(1, column).fill.fgColor.rgb.endswith(ORANGE)
+        assert outsource_input.cell(2, column).fill.fgColor.rgb.endswith(YELLOW)

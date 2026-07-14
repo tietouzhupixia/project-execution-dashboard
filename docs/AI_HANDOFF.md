@@ -346,14 +346,15 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
 
 - Formula export still contains all 13 ordered sheets (5 output, 5 calculation, 3 input),
   but the three input sheets are now the only raw-data layer.
-- Outsource source columns, project source columns, personnel-3 list, and every allocation
-  column now use simple row/lookup formulas. Matching status/project remain explicit generated
-  or human-confirmed decisions because fuzzy matching is not represented as a fragile Excel formula.
-- Output exceptions remain a generated text audit list; all meaningful numeric calculations and
-  checks are formula-backed. Formula headers/cells retain orange/yellow audit styling.
+- Outsource matching decisions are copied into four yellow confirmation columns on
+  `input_外委更新金额`; every cell on the corresponding calculation sheet is a formula over input.
+- The workbook reserves 200 project rows, 200 outsource rows, 100 people rows, and 1000 allocation
+  rows. All data cells on all calculation/output sheets are formulas, including exception text.
+- Within that capacity, users may add or edit input rows and recalculate entirely in desktop Excel.
+  Formula headers/cells retain orange/yellow audit styling.
 - Real 0713 Excel recalculation: company/person/project max difference 0, department max difference
-  `4.66e-10`, and zero Excel error cells. UI download labels now explicitly distinguish value and
-  complete-formula workbooks.
+  `4.66e-10`, 57 exceptions match, and zero Excel error cells. Adding a 1000-yuan project at input
+  row 100 increases company amount by 1000, project count by one, and the assigned person's output.
 
 ## 2026-07-14 Personnel Relation Completeness Guard
 

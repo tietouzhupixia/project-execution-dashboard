@@ -331,7 +331,8 @@ the legacy four-section downloads. Both value and formula workbooks contain, in 
 - `output_`: summary, company, department, person, and exceptions.
 - `calculation_`: outsourced matching, project net detail, personnel allocation,
   personnel-3 list, and checks.
-- `input_`: untouched implementation, outsourced amount, and personnel relation tables.
+- `input_`: implementation, outsourced amount, and personnel relation tables；公式版仅在
+  外委输入表末尾追加四个匹配确认输入列。
 
 The formula workbook marks formula headers orange (`#C65911`) and formula cells pale
 yellow (`#FFF2CC`). Project IDs in project and allocation calculation sheets are written
@@ -339,17 +340,18 @@ as normalized text, and allocation uses `SUMIF` over those text keys.
 
 公式核算版必须把三张 `input_` 作为唯一原始数据层。可直接追溯的字段不得再次写死：
 
-- 外委匹配表的序号、名称、金额引用 `input_外委更新金额`；匹配状态和指定项目保留为
-  系统初判/人工确认结果，采信判断与金额使用公式。
+- `input_外委更新金额` 追加四个黄色确认输入列：确认匹配状态、确认项目编号、导出时
+  最高匹配度和确认说明；外委 calculation 表的全部单元格只用公式引用这些输入。
 - 项目净额明细的项目字段、金额、比例、日期和期初进度引用 `input_实施进度表`，后续
   净额、年度进度与纳入口径金额均使用分步公式。
-- 人员3名单引用 `input_人员关系表` 的首次有效人员行；人员分摊明细的项目、人员、比例、
+- 人员3名单逐行引用 `input_人员关系表` 并用 `COUNTIF` 排除重复姓名；人员分摊明细的项目、人员、比例、
   部门、范围判断和金额全部沿输入/计算表使用公式。
-- 公司、部门、人员、汇总和核验表继续引用 calculation 层。异常表是规则引擎生成的文本
-  审计清单，不为制造公式而使用无意义的 `="固定文字"`。
+- 公司、部门、人员、汇总和核验表继续引用 calculation 层；异常检查按项目、人员槽位、
+  外委状态预生成公式规则，修改 input 后由 Excel 自行更新异常类型与说明。
 
-导出工作簿由应用按本次 input 行数生成，公式范围使用实际行边界而非整列引用；以后新增、
-删除项目或人员时应重新上传三张 input 并导出，不能只在旧成果文件末尾粘贴新行。
+完整核算版预留 200 个项目、200 条外委和 100 名人员；人员分摊对应 1000 个
+`项目×人员槽位` 公式行。用户在预留 input 行内新增/修改数据后，全部 calculation/output
+自动重算，无需网页。超出预留容量时才需要重新上传网页生成更大模板。
 
 ## 17. KPI and Summary-Cell Drill-down
 
