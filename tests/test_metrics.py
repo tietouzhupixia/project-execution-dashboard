@@ -423,8 +423,8 @@ def test_build_export_workbook_sheets_and_values():
 
     archive = pd.read_excel(book, sheet_name="归档分析", header=None)
     text = archive.fillna("").astype(str).to_numpy().ravel().tolist()
-    assert any("视角一" in t for t in text)
-    assert any("视角二" in t for t in text)
+    assert any("视角一：各阶段项目整体归档率（当前及之前阶段都要完成）" in t for t in text)
+    assert any("视角二：环节维度归档完成率（各归档环节单独计算）" in t for t in text)
 
     base = pd.read_excel(book, sheet_name="实施进度底表")
     assert "启动应归档" in base.columns
@@ -603,6 +603,9 @@ def test_formula_workbook_uses_live_formulas_and_dynamic_column_letters():
 
     # 视角公式引用当前进度列字母（动态）
     prog = wb["进度信息分析"]
+    progress_text = [str(c.value) for row in prog.iter_rows() for c in row if c.value is not None]
+    assert any("视角一：各阶段项目整体归档率（当前及之前阶段都要完成）" in t for t in progress_text)
+    assert any("视角二：环节维度归档完成率（各归档环节单独计算）" in t for t in progress_text)
     all_formulas = "\n".join(
         str(c.value) for row in prog.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")
     )

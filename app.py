@@ -890,7 +890,7 @@ a1, a2 = st.columns(2)
 with a1:
     with st.container(border=True):
         archive_view_1_selection = render_ratio_bar_chart(
-            "视角一：各阶段项目整体归档率（递进合规视角）",
+            "视角一：各阶段项目整体归档率（当前及之前阶段都要完成）",
             metrics.archive_view_1,
             category_col="阶段",
             denominator_col="应归档项目数（分母）",
@@ -916,7 +916,7 @@ with a1:
 with a2:
     with st.container(border=True):
         archive_view_2_selection = render_ratio_bar_chart(
-            "视角二：环节维度归档完成率（节点执行视角）",
+            "视角二：环节维度归档完成率（各归档环节单独计算）",
             metrics.archive_view_2,
             category_col="归档环节",
             denominator_col="应完成归档环节数（分母）",
@@ -943,9 +943,9 @@ with a2:
 with st.expander("查看归档合规明细表"):
     d1, d2 = st.columns(2)
     with d1:
-        render_metric_table("视角一：各阶段项目整体归档率（递进合规视角）", metrics.archive_view_1)
+        render_metric_table("视角一：各阶段项目整体归档率（当前及之前阶段都要完成）", metrics.archive_view_1)
     with d2:
-        render_metric_table("视角二：环节维度归档完成率（节点执行视角）", metrics.archive_view_2)
+        render_metric_table("视角二：环节维度归档完成率（各归档环节单独计算）", metrics.archive_view_2)
 
 # ---------------------------------------------------------- 四、人效分析
 render_section_banner("四、人效分析")

@@ -158,7 +158,7 @@ def _write_progress_sheet(wb: Workbook, business_units: list[str], rng, last_row
         row += 3 + len(business_units) + 1
 
     # —— 视角一：各阶段项目整体归档率
-    ws.cell(row=row, column=1, value="四、视角一：各阶段项目整体归档率（递进合规视角）")
+    ws.cell(row=row, column=1, value="四、视角一：各阶段项目整体归档率（当前及之前阶段都要完成）")
     row += 1
     headers = ["阶段", "进度范围", "应归档项目数（分母）", "已完成归档项目数（分子）", "归档率"]
     for c, h in enumerate(headers, start=1):
@@ -189,7 +189,7 @@ def _write_progress_sheet(wb: Workbook, business_units: list[str], rng, last_row
     row = total + 2
 
     # —— 视角二：环节维度归档完成率
-    ws.cell(row=row, column=1, value="五、视角二：环节维度归档完成率（节点执行视角）")
+    ws.cell(row=row, column=1, value="五、视角二：环节维度归档完成率（各归档环节单独计算）")
     row += 1
     headers2 = ["归档环节", "触发条件", "应完成归档环节数（分母）", "已完成归档环节数（分子）", "环节完成率"]
     for c, h in enumerate(headers2, start=1):

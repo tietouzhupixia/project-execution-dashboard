@@ -31,8 +31,8 @@ def build_export_workbook(
             writer,
             "归档分析",
             [
-                ("视角一：各阶段项目整体归档率（递进合规视角）", metrics.archive_view_1),
-                ("视角二：环节维度归档完成率（节点执行视角）", metrics.archive_view_2),
+                ("视角一：各阶段项目整体归档率（当前及之前阶段都要完成）", metrics.archive_view_1),
+                ("视角二：环节维度归档完成率（各归档环节单独计算）", metrics.archive_view_2),
             ],
         )
 

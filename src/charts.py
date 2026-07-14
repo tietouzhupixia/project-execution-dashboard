@@ -46,6 +46,18 @@ def inject_css() -> None:
             justify-content: center; text-align: center; letter-spacing: 0.2em;
             margin: 0.2rem 0;
         }
+        .chart-title {
+            color: #1F2329;
+            font-size: 0.95rem;
+            font-weight: 600;
+            line-height: 1.45;
+            overflow-wrap: anywhere;
+            padding: 0.9rem 0.9rem 0.15rem 0.9rem;
+        }
+        [data-testid="stPlotlyChart"] {
+            width: 100%;
+            min-width: 0;
+        }
         .group-banner.grid-header {
             min-height: 68px;
             display: flex;
@@ -116,15 +128,39 @@ def inject_css() -> None:
         div[class*="st-key-delivery-tall-card-"] [data-testid="stVerticalBlock"] {
             justify-content: space-between;
         }
-        @media (max-width: 900px) {
+        @media (max-width: 1200px) {
+            [data-testid="stHorizontalBlock"] {
+                flex-wrap: wrap;
+            }
+            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 250px;
+            }
+            div[class*="st-key-selectable_table_"] [data-testid="stHorizontalBlock"] {
+                flex-wrap: nowrap;
+            }
+            div[class*="st-key-selectable_table_"] [data-testid="stColumn"] {
+                min-width: 0;
+            }
             .row-label,
             .delivery-band-unaccepted,
             .delivery-band-accepted { min-height: 110px; }
+            div[class*="st-key-delivery-top-kpi-"][data-testid="stVerticalBlock"],
+            div[class*="st-key-delivery-tall-card-"][data-testid="stVerticalBlock"] {
+                min-height: 0;
+            }
             div[class*="st-key-alert-grid-card-"][data-testid="stVerticalBlock"] {
                 min-height: 0;
             }
             div[class*="st-key-delivery-tall-card-"] [data-testid="stVerticalBlockBorderWrapper"] {
                 min-height: 0;
+            }
+        }
+        @media (max-width: 900px) {
+            [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+                min-width: 100%;
+            }
+            div[class*="st-key-selectable_table_"] [data-testid="stColumn"] {
+                min-width: 0;
             }
         }
         .big-card { padding: 0.9rem 1.1rem 1.1rem 1.1rem; }
@@ -171,7 +207,8 @@ def inject_css() -> None:
         div[class*="st-key-selectable_table_"] {
             border: 1px solid #DEE0E3;
             border-radius: 8px;
-            overflow: hidden;
+            overflow-x: auto;
+            overflow-y: hidden;
             margin-bottom: 0.75rem;
             gap: 0 !important;
         }
@@ -179,6 +216,7 @@ def inject_css() -> None:
             gap: 0 !important;
             margin: 0 !important;
             padding: 0 !important;
+            min-width: 680px;
         }
         div[class*="st-key-selectable_table_"] [data-testid="stVerticalBlock"] {
             gap: 0 !important;
@@ -283,6 +321,14 @@ def render_big_number(title: str, value: str, caption: str = "") -> None:
     )
 
 
+def render_chart_title(title: str) -> None:
+    """Render chart titles as responsive HTML instead of clipped Plotly SVG text."""
+    st.markdown(
+        f'<div class="chart-title">{escape(title)}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def render_clickable_big_number(
     title: str,
     value: str,
@@ -376,7 +422,7 @@ def _render_clickable_pie(
     key: str | None,
     labels: list[str],
 ) -> str | None:
-    """Render a Pie trace with real click events and one-shot component state."""
+    """Render the responsive pie with the click component used by existing drill-downs."""
     if key is None:
         st.plotly_chart(fig, use_container_width=True)
         return None
@@ -389,7 +435,7 @@ def _render_clickable_pie(
         click_event=True,
         select_event=False,
         hover_event=False,
-        override_height=300,
+        override_height=320,
         override_width="100%",
         key=widget_key,
     )
@@ -431,8 +477,7 @@ def render_count_chart(
     labels = chart_data[name_col].astype(str).tolist()
     values = [float(value) for value in chart_data["数量"].tolist()]
     colors = [PALETTE[index % len(PALETTE)] for index in range(len(labels))]
-    # Build from Python lists so the older click-component frontend receives
-    # plain JSON arrays instead of Plotly 6 typed-array payloads.
+    render_chart_title(title)
     fig = go.Figure(
         go.Pie(
             labels=labels,
@@ -442,16 +487,25 @@ def render_count_chart(
         )
     )
     fig.update_traces(
-        texttemplate="%{label}: %{value} (%{percent:.2%})",
-        textposition="outside",
+        texttemplate="%{percent:.0%}",
+        textposition="inside",
+        insidetextorientation="auto",
         textfont_size=12,
+        hovertemplate="%{label}<br>数量：%{value}<br>占比：%{percent:.2%}<extra></extra>",
     )
     fig.update_layout(
-        title=title,
-        showlegend=False,
-        title_font=dict(size=15, color="#1F2329"),
-        margin=dict(t=48, b=24, l=24, r=24),
-        height=300,
+        showlegend=True,
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.03,
+            xanchor="left",
+            x=0,
+            font=dict(size=11),
+        ),
+        margin=dict(t=8, b=76, l=12, r=12),
+        height=320,
+        uniformtext=dict(minsize=10, mode="hide"),
         paper_bgcolor="rgba(0,0,0,0)",
     )
     return _render_clickable_pie(fig, key=key, labels=labels)
@@ -468,11 +522,11 @@ def render_bar_chart(
     if data is None or data.empty or x not in data.columns or y not in data.columns:
         st.info(f"{title}: 暂无数据")
         return None
-    fig = px.bar(data.sort_values(x), x=x, y=y, title=title, text_auto=True)
+    render_chart_title(title)
+    fig = px.bar(data.sort_values(x), x=x, y=y, text_auto=True)
     fig.update_traces(marker_color=BLUE, textposition="outside", textfont=dict(color=BLUE))
     fig.update_layout(
-        title_font=dict(size=15, color="#1F2329"),
-        margin=dict(t=48, b=24, l=24, r=24),
+        margin=dict(t=12, b=24, l=24, r=24),
         height=300,
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -524,10 +578,9 @@ def render_deviation_ranking_chart(
             xanchor="left",
             font=dict(size=11, color="#646A73"),
         )
+    render_chart_title(title)
     fig.update_layout(
-        title=title,
-        title_font=dict(size=15, color="#1F2329"),
-        margin=dict(t=48, b=24, l=24, r=86),
+        margin=dict(t=12, b=24, l=24, r=86),
         height=max(300, 88 + 42 * len(ranked)),
         xaxis=dict(title=None, tickformat=".0%", zeroline=True, zerolinecolor="#C9CDD4"),
         yaxis=dict(title=None),
@@ -571,10 +624,9 @@ def render_horizontal_ranking_chart(
             hovertemplate=f"%{{y}}<br>{value_col}：%{{x:{value_format}}}<extra></extra>",
         )
     )
+    render_chart_title(title)
     fig.update_layout(
-        title=title,
-        title_font=dict(size=15, color="#1F2329"),
-        margin=dict(t=48, b=24, l=24, r=96),
+        margin=dict(t=12, b=24, l=24, r=96),
         height=max(300, 88 + 34 * len(ranked)),
         xaxis=dict(title=None, visible=False),
         yaxis=dict(title=None),
@@ -602,6 +654,7 @@ def render_multi_bar_chart(
     chart_data["_drilldown_key"] = (
         chart_data[x].astype(str) + "|||" + chart_data[series].astype(str)
     )
+    render_chart_title(title)
     fig = px.bar(
         chart_data,
         x=x,
@@ -609,13 +662,12 @@ def render_multi_bar_chart(
         color=series,
         barmode="group",
         custom_data=["_drilldown_key"],
-        color_discrete_sequence=PALETTE, text_auto=True, title=title,
+        color_discrete_sequence=PALETTE, text_auto=True,
     )
     fig.update_traces(textposition="outside", cliponaxis=False)
     fig.update_layout(
-        title_font=dict(size=15, color="#1F2329"),
         legend=dict(orientation="h", yanchor="top", y=-0.12, x=0, title=None, font=dict(size=11)),
-        margin=dict(t=48, b=56, l=24, r=24),
+        margin=dict(t=12, b=56, l=24, r=24),
         height=340,
         yaxis=dict(visible=False),
         xaxis_title=None,
@@ -649,6 +701,7 @@ def render_ratio_bar_chart(
         return None
 
     categories = data[category_col].astype(str).tolist()
+    render_chart_title(title)
     fig = go.Figure()
     fig.add_bar(
         name=denominator_label,
@@ -682,11 +735,9 @@ def render_ratio_bar_chart(
         showlegend=False,
     )
     fig.update_layout(
-        title=title,
-        title_font=dict(size=15, color="#1F2329"),
         barmode="group",
         legend=dict(orientation="h", yanchor="top", y=-0.12, x=0, font=dict(size=11)),
-        margin=dict(t=48, b=56, l=24, r=24),
+        margin=dict(t=12, b=56, l=24, r=24),
         height=360,
         yaxis=dict(range=[0, top * 1.35], visible=False),
         xaxis_title=None,

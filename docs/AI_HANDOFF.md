@@ -364,6 +364,18 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
   show diagnostic results but must disable both complete-workbook download buttons until the
   `input_人员关系表` is corrected.
 
+## 2026-07-14 Responsive Dashboard Layout
+
+- Archive titles now use the same plain-language wording in the web page, value workbook, and
+  formula workbook: `当前及之前阶段都要完成` and `各归档环节单独计算`.
+- Chart titles are rendered outside Plotly so they can wrap without clipping. Pie percentages are
+  inside slices; full labels remain in the bottom legend and hover text. Pie drill-down still uses
+  `streamlit-plotly-events` because native Streamlit pie selection was unreliable.
+- Below 1200px cards may wrap; below 900px main cards become single-column. Custom metric tables
+  use their own horizontal scroll instead of causing document-level overflow.
+- `scripts/responsive_ui_check.py` checks equivalent 80/100/125/150/175% browser zoom widths,
+  page overflow, table overflow behavior, and pie click-to-detail.
+
 ## Verification Done
 
 - `python -m compileall -q app.py src tests` passed.
