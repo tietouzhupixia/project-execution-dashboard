@@ -143,15 +143,23 @@ def build_progress_tables(raw: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return tables
 
 
+ARCHIVE_VIEW_1_RULES = [
+    ("启动阶段", "10%<=当前进度<50%", 0.1, 0.5, ["启动归档"]),
+    ("中期阶段", "50%<=当前进度<90%", 0.5, 0.9, ["启动归档", "中期归档"]),
+    ("终期阶段", "当前进度>=90%", 0.9, None, ["启动归档", "中期归档", "临近终期归档"]),
+]
+
+ARCHIVE_VIEW_2_RULES = [
+    ("启动归档环节", "当前进度>=10%", 0.1, "启动归档"),
+    ("中期归档环节", "当前进度>=50%", 0.5, "中期归档"),
+    ("终期归档环节", "当前进度>=90%", 0.9, "临近终期归档"),
+]
+
+
 def build_archive_view_1(raw: pd.DataFrame) -> pd.DataFrame:
     """Project-stage progressive compliance view."""
-    rows = [
-        ("启动阶段", "10%<=当前进度<50%", 0.1, 0.5, ["启动归档"]),
-        ("中期阶段", "50%<=当前进度<90%", 0.5, 0.9, ["启动归档", "中期归档"]),
-        ("终期阶段", "当前进度>=90%", 0.9, None, ["启动归档", "中期归档", "临近终期归档"]),
-    ]
     result = []
-    for stage, scope, low, high, checks in rows:
+    for stage, scope, low, high, checks in ARCHIVE_VIEW_1_RULES:
         scoped = progress_scope(raw, low, high)
         denominator = len(scoped)
         numerator = int(scoped.apply(lambda row: all(row.get(col) == YES for col in checks), axis=1).sum())
@@ -181,13 +189,8 @@ def build_archive_view_1(raw: pd.DataFrame) -> pd.DataFrame:
 
 def build_archive_view_2(raw: pd.DataFrame) -> pd.DataFrame:
     """Archive-node completion view."""
-    rows = [
-        ("启动归档环节", "当前进度>=10%", 0.1, "启动归档"),
-        ("中期归档环节", "当前进度>=50%", 0.5, "中期归档"),
-        ("终期归档环节", "当前进度>=90%", 0.9, "临近终期归档"),
-    ]
     result = []
-    for node, condition, threshold, archive_col in rows:
+    for node, condition, threshold, archive_col in ARCHIVE_VIEW_2_RULES:
         scoped = progress_scope(raw, threshold, None)
         denominator = len(scoped)
         numerator = int((scoped.get(archive_col) == YES).sum()) if archive_col in scoped.columns else 0
@@ -213,6 +216,67 @@ def build_archive_view_2(raw: pd.DataFrame) -> pd.DataFrame:
         }
     )
     return pd.DataFrame(result)
+
+
+def archive_view_1_project_subset(
+    raw: pd.DataFrame,
+    stage: str,
+    *,
+    completed: bool,
+) -> pd.DataFrame:
+    """Reverse one view-1 denominator/numerator bar to its source projects."""
+    if stage == "整体":
+        parts = [
+            archive_view_1_project_subset(raw, rule[0], completed=completed)
+            for rule in ARCHIVE_VIEW_1_RULES
+        ]
+        return pd.concat(parts).sort_index() if parts else raw.iloc[0:0].copy()
+
+    rule = next((item for item in ARCHIVE_VIEW_1_RULES if item[0] == stage), None)
+    if rule is None:
+        return raw.iloc[0:0].copy()
+    _, _, low, high, checks = rule
+    scoped = progress_scope(raw, low, high)
+    if not completed:
+        return scoped
+
+    complete = pd.Series(True, index=scoped.index)
+    for column in checks:
+        if column not in scoped.columns:
+            return scoped.iloc[0:0].copy()
+        complete &= scoped[column].astype(str).str.strip().eq(YES)
+    return scoped.loc[complete].copy()
+
+
+def archive_view_2_record_subset(
+    raw: pd.DataFrame,
+    node: str,
+    *,
+    completed: bool,
+) -> pd.DataFrame:
+    """Reverse one view-2 bar to archive-node records (projects may repeat)."""
+    if node == "整体":
+        parts = [
+            archive_view_2_record_subset(raw, rule[0], completed=completed)
+            for rule in ARCHIVE_VIEW_2_RULES
+        ]
+        return pd.concat(parts, ignore_index=True) if parts else raw.iloc[0:0].copy()
+
+    rule = next((item for item in ARCHIVE_VIEW_2_RULES if item[0] == node), None)
+    if rule is None:
+        return raw.iloc[0:0].copy()
+    _, _, threshold, archive_col = rule
+    scoped = progress_scope(raw, threshold, None)
+    if completed:
+        if archive_col not in scoped.columns:
+            scoped = scoped.iloc[0:0].copy()
+        else:
+            scoped = scoped.loc[
+                scoped[archive_col].astype(str).str.strip().eq(YES)
+            ].copy()
+    detail = scoped.copy()
+    detail.insert(0, "归档环节", node)
+    return detail
 
 
 def build_efficiency(raw: pd.DataFrame, relation: pd.DataFrame | None, warnings: list[str]) -> dict[str, pd.DataFrame]:
@@ -342,15 +406,14 @@ def build_kpi_strip(raw: pd.DataFrame) -> dict:
 def build_delivery_analysis(raw: pd.DataFrame, ref_year: int | None = None) -> dict:
     """Section 2 groups (reference images 3-4): 未验收[当年/跨年] and 已验收."""
     ref_year = ref_year or pd.Timestamp.now().year
-    status = raw["交付状态"].astype(str) if "交付状态" in raw.columns else pd.Series("", index=raw.index)
     dates = parse_excel_date_series(raw["预计交付日期"]) if "预计交付日期" in raw.columns else pd.Series(pd.NaT, index=raw.index)
     year = dates.dt.year
 
-    unaccepted = status.str.contains("未验收", na=False)
-    cross_mask = unaccepted & (year > ref_year)
-    current_mask = unaccepted & ~(year > ref_year)  # 含逾期与缺日期项目
-    accepted_mask = status.str.contains("已验收", na=False)
-    delivered = status.str.contains("已交付", na=False)
+    current_mask = delivery_group_mask(raw, "current_unaccepted", ref_year)
+    cross_mask = delivery_group_mask(raw, "cross_unaccepted", ref_year)
+    accepted_mask = delivery_group_mask(raw, "accepted", ref_year)
+    delivered = raw["交付状态"].astype(str).str.contains("已交付", na=False) if "交付状态" in raw.columns else pd.Series(False, index=raw.index)
+    unaccepted = raw["交付状态"].astype(str).str.contains("未验收", na=False) if "交付状态" in raw.columns else pd.Series(False, index=raw.index)
 
     def group_stats(mask: pd.Series) -> dict:
         scoped = raw.loc[mask]
@@ -418,24 +481,64 @@ STAGE_ALERT_RULES = [
 ]
 
 
+def stage_alert_project_subsets(raw: pd.DataFrame, stage: str) -> dict[str, pd.DataFrame | None]:
+    """Return the exact project scopes behind one stage-alert metric group."""
+    rule = next((item for item in STAGE_ALERT_RULES if item[0] == stage), None)
+    if rule is None:
+        empty = raw.iloc[0:0].copy()
+        return {
+            "projects": empty,
+            "unqc": None,
+            "unarchived": empty,
+            "region_focus": empty,
+        }
+
+    _, due_col, done_col = rule
+    due = (
+        pd.to_numeric(raw[due_col], errors="coerce").fillna(0).astype(int)
+        if due_col in raw.columns
+        else pd.Series(0, index=raw.index)
+    )
+    done = (
+        pd.to_numeric(raw[done_col], errors="coerce").fillna(0).astype(int)
+        if done_col in raw.columns
+        else pd.Series(0, index=raw.index)
+    )
+    in_stage = due.eq(1)
+    projects = raw.loc[in_stage].copy()
+    unarchived = raw.loc[in_stage & done.eq(0)].copy()
+
+    if "是否完成质控？" in raw.columns:
+        qc = raw["是否完成质控？"].astype(str).str.strip()
+        unqc: pd.DataFrame | None = raw.loc[in_stage & qc.ne("是")].copy()
+        region_focus = unqc
+    else:
+        unqc = None
+        region_focus = unarchived
+
+    return {
+        "projects": projects,
+        "unqc": unqc,
+        "unarchived": unarchived,
+        "region_focus": region_focus,
+    }
+
+
 def build_stage_alerts(raw: pd.DataFrame) -> list[dict]:
     """Section 3 (reference images 5-6): per-stage incomplete QC/archive counts.
 
     Expects a normalized frame (derived action columns present).
     """
-    qc = raw["是否完成质控？"].astype(str).str.strip() if "是否完成质控？" in raw.columns else None
     alerts = []
-    for stage, due_col, done_col in STAGE_ALERT_RULES:
-        due = pd.to_numeric(raw.get(due_col), errors="coerce").fillna(0).astype(int) if due_col in raw.columns else pd.Series(0, index=raw.index)
-        done = pd.to_numeric(raw.get(done_col), errors="coerce").fillna(0).astype(int) if done_col in raw.columns else pd.Series(0, index=raw.index)
-        in_stage = due == 1
-        unarchived = in_stage & (done == 0)
-        unqc = in_stage & (qc != "是") if qc is not None else None
-
-        focus = unqc if unqc is not None else unarchived
-        if "A-项目经理区域" in raw.columns and focus.any():
+    for stage, _, _ in STAGE_ALERT_RULES:
+        subsets = stage_alert_project_subsets(raw, stage)
+        projects = subsets["projects"]
+        unqc = subsets["unqc"]
+        unarchived = subsets["unarchived"]
+        focus = subsets["region_focus"]
+        if "A-项目经理区域" in raw.columns and focus is not None and not focus.empty:
             region_table = (
-                explode_region(raw.loc[focus])
+                explode_region(focus)
                 .groupby("业务单元", dropna=False)
                 .size()
                 .reset_index(name="记录数")
@@ -447,9 +550,9 @@ def build_stage_alerts(raw: pd.DataFrame) -> list[dict]:
         alerts.append(
             {
                 "stage": stage,
-                "project_count": int(in_stage.sum()),
-                "unarchived_count": int(unarchived.sum()),
-                "unqc_count": int(unqc.sum()) if unqc is not None else None,
+                "project_count": len(projects) if projects is not None else 0,
+                "unarchived_count": len(unarchived) if unarchived is not None else 0,
+                "unqc_count": len(unqc) if unqc is not None else None,
                 "region_table": region_table,
             }
         )
@@ -476,7 +579,13 @@ def build_person_area_mapping(relation: pd.DataFrame | None) -> dict[str, str]:
         return {}
 
     mapping: dict[str, str] = {}
-    pairs = [("人员 2", "所属区域 2"), ("人员", "所属区域")]
+    # 新版三表工作簿以“人员 3 / 所属区域 3”为正式口径；旧字段仅作兼容回退。
+    # 同一人员在多个口径中出现时，保留排在最前面的人员3归属。
+    pairs = [
+        ("人员 3", "所属区域 3"),
+        ("人员 2", "所属区域 2"),
+        ("人员", "所属区域"),
+    ]
     for person_col, area_col in pairs:
         if person_col not in relation.columns or area_col not in relation.columns:
             continue
@@ -560,17 +669,102 @@ def month_counts_collapsed(raw: pd.DataFrame, column: str, ref_year: int | None 
     if column not in raw.columns:
         return pd.DataFrame(columns=["年月", "数量"])
     ref_year = ref_year or pd.Timestamp.now().year
-    dates = parse_excel_date_series(raw[column])
-
-    def label(d: object) -> str:
-        if pd.isna(d):
-            return "未填"
-        if d.year > ref_year:
-            return f"{d.year % 100}年"
-        return d.strftime("%y年%m月")
-
-    labels = dates.map(label)
+    labels = collapsed_month_labels(raw[column], ref_year)
     return labels.value_counts().rename_axis("年月").reset_index(name="数量")
+
+
+def collapsed_month_labels(series: pd.Series, ref_year: int | None = None) -> pd.Series:
+    """Use the exact labels shown by collapsed overview month charts."""
+    ref_year = ref_year or pd.Timestamp.now().year
+    dates = parse_excel_date_series(series)
+
+    def label(value: object) -> str:
+        if pd.isna(value):
+            return "未填"
+        if value.year > ref_year:
+            return f"{value.year % 100}年"
+        return value.strftime("%y年%m月")
+
+    return dates.map(label)
+
+
+def project_subset_by_value(raw: pd.DataFrame, column: str, value: str) -> pd.DataFrame:
+    """Return rows matching an exact chart category, including the 未填 bucket."""
+    if column not in raw.columns:
+        return raw.iloc[0:0].copy()
+    series = raw[column]
+    if value == "未填":
+        mask = series.isna() | series.astype(str).str.strip().eq("")
+    else:
+        mask = series.astype(str).str.strip().eq(str(value).strip())
+    return raw.loc[mask].copy()
+
+
+def project_subset_by_keyword(
+    raw: pd.DataFrame,
+    column: str,
+    value: str,
+    positive: str,
+    negative: str,
+) -> pd.DataFrame:
+    """Mirror keyword_split so a clicked binary status maps back to source rows."""
+    if column not in raw.columns:
+        return raw.iloc[0:0].copy()
+    series = raw[column].astype(str)
+    positive_mask = series.str.contains(positive, na=False)
+    negative_mask = series.str.contains(negative, na=False)
+    if value == positive:
+        mask = positive_mask
+    elif value == negative:
+        mask = ~positive_mask & negative_mask
+    else:
+        mask = ~positive_mask & ~negative_mask
+    return raw.loc[mask].copy()
+
+
+def project_subset_by_month(
+    raw: pd.DataFrame,
+    column: str,
+    value: str,
+    *,
+    collapsed: bool,
+    ref_year: int | None = None,
+) -> pd.DataFrame:
+    """Map a clicked date bar back to projects using the same displayed labels."""
+    if column not in raw.columns:
+        return raw.iloc[0:0].copy()
+    if collapsed:
+        labels = collapsed_month_labels(raw[column], ref_year)
+    else:
+        labels = parse_excel_date_series(raw[column]).dt.strftime("%y年%m月").fillna("未填")
+    return raw.loc[labels.eq(value)].copy()
+
+
+def delivery_group_mask(raw: pd.DataFrame, group: str, ref_year: int | None = None) -> pd.Series:
+    """Single source of truth for section-2 project groups and their drill-downs."""
+    ref_year = ref_year or pd.Timestamp.now().year
+    status = raw["交付状态"].astype(str) if "交付状态" in raw.columns else pd.Series("", index=raw.index)
+    dates = parse_excel_date_series(raw["预计交付日期"]) if "预计交付日期" in raw.columns else pd.Series(pd.NaT, index=raw.index)
+    year = dates.dt.year
+    unaccepted = status.str.contains("未验收", na=False)
+
+    groups = {
+        "current_unaccepted": unaccepted & ~(year > ref_year),
+        "cross_unaccepted": unaccepted & (year > ref_year),
+        "accepted": status.str.contains("已验收", na=False),
+        "delivered_unaccepted": status.str.contains("已交付", na=False) & unaccepted,
+    }
+    if group not in groups:
+        raise ValueError(f"Unknown delivery group: {group}")
+    return groups[group]
+
+
+def project_subset_by_delivery_group(
+    raw: pd.DataFrame,
+    group: str,
+    ref_year: int | None = None,
+) -> pd.DataFrame:
+    return raw.loc[delivery_group_mask(raw, group, ref_year)].copy()
 
 
 def projects_of_unit(raw: pd.DataFrame, unit: str) -> pd.DataFrame:

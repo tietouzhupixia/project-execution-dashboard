@@ -6,17 +6,25 @@ from src.data_loader import load_workbook, normalize_raw_data, parse_excel_date_
 from src.export import build_export_workbook
 from src.export_formulas import build_formula_workbook
 from src.metrics import (
+    archive_view_1_project_subset,
+    archive_view_2_record_subset,
     build_all_metrics,
     build_archive_view_1,
     build_archive_view_2,
     build_delivery_analysis,
     build_efficiency,
     build_kpi_strip,
+    build_project_overview,
     build_progress_summary,
     build_stage_alerts,
     filter_projects,
     month_counts_collapsed,
+    project_subset_by_delivery_group,
+    project_subset_by_keyword,
+    project_subset_by_month,
+    project_subset_by_value,
     projects_of_unit,
+    stage_alert_project_subsets,
 )
 
 
@@ -40,6 +48,36 @@ def test_archive_views():
     assert view2.loc[view2["归档环节"] == "终期归档环节", "已完成归档环节数（分子）"].iloc[0] == 1
 
 
+def test_archive_drilldown_subsets_match_every_bar_value():
+    raw = _reference_raw()
+
+    view1 = build_archive_view_1(raw)
+    for _, row in view1.iterrows():
+        assert len(
+            archive_view_1_project_subset(raw, row["阶段"], completed=False)
+        ) == row["应归档项目数（分母）"]
+        assert len(
+            archive_view_1_project_subset(raw, row["阶段"], completed=True)
+        ) == row["已完成归档项目数（分子）"]
+
+    view2 = build_archive_view_2(raw)
+    for _, row in view2.iterrows():
+        assert len(
+            archive_view_2_record_subset(raw, row["归档环节"], completed=False)
+        ) == row["应完成归档环节数（分母）"]
+        assert len(
+            archive_view_2_record_subset(raw, row["归档环节"], completed=True)
+        ) == row["已完成归档环节数（分子）"]
+
+    overall_nodes = archive_view_2_record_subset(raw, "整体", completed=False)
+    assert overall_nodes["A-项目名称"].tolist().count("P3") == 3
+    assert set(overall_nodes["归档环节"]) == {
+        "启动归档环节",
+        "中期归档环节",
+        "终期归档环节",
+    }
+
+
 def test_virtual_execution_ratio_and_efficiency():
     warnings = []
     raw = pd.DataFrame(
@@ -61,6 +99,67 @@ def test_virtual_execution_ratio_and_efficiency():
     person = efficiency["person"].set_index("人员")
     assert person.loc["A", "净执行合同额"] == 40
     assert person.loc["B", "净执行合同额"] == 40
+
+
+def test_chart_drilldown_filters_match_displayed_counts():
+    raw = pd.DataFrame(
+        [
+            {
+                "A-项目名称": "P1",
+                "执行项目类型": "新签",
+                "交付状态": "未交付-未验收",
+                "进度分类": "启动",
+                "预计交付日期": "2026-08-10",
+                "预计验收日期（若已签约，默认经法）": "2026-09-10",
+            },
+            {
+                "A-项目名称": "P2",
+                "执行项目类型": "往年遗留",
+                "交付状态": "已交付-未验收",
+                "进度分类": "中期",
+                "预计交付日期": "2027-03-01",
+                "预计验收日期（若已签约，默认经法）": "2027-05-01",
+            },
+            {
+                "A-项目名称": "P3",
+                "执行项目类型": None,
+                "交付状态": "已交付-已验收",
+                "进度分类": "终期",
+                "预计交付日期": None,
+                "预计验收日期（若已签约，默认经法）": None,
+            },
+        ]
+    )
+    overview = build_project_overview(raw)
+
+    for row in overview["project_type"].to_dict("records"):
+        detail = project_subset_by_value(raw, "执行项目类型", str(row["执行项目类型"]))
+        assert len(detail) == row["数量"]
+
+    for row in overview["acceptance_split"].to_dict("records"):
+        detail = project_subset_by_keyword(
+            raw,
+            "交付状态",
+            str(row["状态"]),
+            "已验收",
+            "未验收",
+        )
+        assert len(detail) == row["数量"]
+
+    for row in overview["estimated_delivery_month"].to_dict("records"):
+        detail = project_subset_by_month(
+            raw,
+            "预计交付日期",
+            str(row["年月"]),
+            collapsed=True,
+            ref_year=2026,
+        )
+        assert len(detail) == row["数量"]
+
+    assert project_subset_by_delivery_group(raw, "current_unaccepted", 2026)["A-项目名称"].tolist() == ["P1"]
+    assert project_subset_by_delivery_group(raw, "cross_unaccepted", 2026)["A-项目名称"].tolist() == ["P2"]
+    assert project_subset_by_delivery_group(raw, "accepted", 2026)["A-项目名称"].tolist() == ["P3"]
+    assert project_subset_by_delivery_group(raw, "delivered_unaccepted", 2026)["A-项目名称"].tolist() == ["P2"]
 
 
 def test_derive_archive_action_columns_when_absent():
@@ -231,7 +330,8 @@ def test_delivery_analysis_groups():
 
 
 def test_stage_alerts():
-    alerts = build_stage_alerts(_reference_raw())
+    raw = _reference_raw()
+    alerts = build_stage_alerts(raw)
     by_stage = {a["stage"]: a for a in alerts}
 
     start = by_stage["项目启动（进度达10%）"]
@@ -249,6 +349,12 @@ def test_stage_alerts():
     assert final["unqc_count"] == 1
     region = final["region_table"]
     assert region.iloc[0]["业务单元"] == "华东事业部"
+
+    start_subsets = stage_alert_project_subsets(raw, "项目启动（进度达10%）")
+    assert len(start_subsets["projects"]) == start["project_count"]
+    assert len(start_subsets["unqc"]) == start["unqc_count"]
+    assert len(start_subsets["unarchived"]) == start["unarchived_count"]
+    assert set(start_subsets["region_focus"]["A-项目名称"]) == {"P1", "P3"}
 
 
 def test_filter_projects():
@@ -555,3 +661,42 @@ def test_load_workbook_with_only_raw_sheet():
     assert workbook.raw.loc[0, "启动应归档"] == 1
     assert workbook.raw.loc[0, "启动已归档"] == 1
 
+
+def test_load_workbook_recognizes_input_people_relation_and_prefers_personnel3():
+    """三表成果文件中的 input_人员关系表也应供原人效章节使用。"""
+    raw = pd.DataFrame(
+        [
+            {
+                "A-项目名称": "P1",
+                "当前进度": 0.3,
+                "交付状态": "未验收",
+                "收入": 100,
+                "B-服务采购比例": 0,
+                "执行人员1": "张三",
+                "执行人员1执行比例": 1,
+            }
+        ]
+    )
+    relation = pd.DataFrame(
+        [
+            {
+                "人员 3": "张三",
+                "所属区域 3": "人员3正式区域",
+                "人员 2": "张三",
+                "所属区域 2": "旧区域",
+            }
+        ]
+    )
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        raw.to_excel(writer, sheet_name="input_实施进度表", index=False)
+        relation.to_excel(writer, sheet_name="input_人员关系表", index=False)
+    buffer.seek(0)
+
+    workbook = load_workbook(buffer)
+    person = build_efficiency(workbook.raw, workbook.relation, [])["person"].set_index("人员")
+
+    assert workbook.relation is not None
+    assert workbook.source_sheet == "input_实施进度表"
+    assert person.loc["张三", "所属区域/业务单元"] == "人员3正式区域"
+    assert person.loc["张三", "数据说明"] == "人员关系表匹配/当前有执行数据"

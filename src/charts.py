@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from html import escape
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+from streamlit_plotly_events import plotly_events
 
 # 参考截图配色：蓝 / 黄 / 绿 / 红 / 浅蓝 / 橙
 PALETTE = ["#3370FF", "#FFC60A", "#34C724", "#F54A45", "#7FB2FF", "#FF8800"]
 BLUE = "#3370FF"
+PENDING_CHART_SELECTION = "_pending_chart_selection"
 
 
 def inject_css() -> None:
@@ -46,6 +50,116 @@ def inject_css() -> None:
         .big-card .v { font-size: 2.3rem; font-weight: 800; color: #3370FF;
                        text-align: center; line-height: 1.5; }
         .big-card .c { font-size: 0.75rem; color: #8F959E; text-align: center; }
+        .clickable-big-card-title {
+            font-size: 0.88rem; font-weight: 600; color: #1F2329;
+            padding: 0.9rem 1.1rem 0 1.1rem;
+        }
+        .clickable-big-card-caption {
+            font-size: 0.75rem; color: #8F959E; text-align: center;
+            padding: 0 1.1rem 1.1rem 1.1rem;
+        }
+        div[class*="st-key-drilldown_big_"] [data-testid="stButton"] button {
+            min-height: 3.45rem;
+            padding: 0.1rem 0.5rem;
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            color: #3370FF;
+            font-size: 2.3rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            line-height: 1.25;
+        }
+        div[class*="st-key-drilldown_big_"] [data-testid="stButton"] button p {
+            color: inherit;
+            font-size: 2.3rem;
+            font-weight: 800;
+            letter-spacing: 0;
+            line-height: 1.25;
+        }
+        div[class*="st-key-drilldown_big_"] [data-testid="stButton"] button:hover {
+            border: 0;
+            background: #F2F6FF;
+            color: #245BDB;
+        }
+        div[class*="st-key-drilldown_big_"] [data-testid="stButton"] button:focus {
+            border: 0;
+            box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.22);
+        }
+        div[class*="st-key-selectable_table_"] {
+            border: 1px solid #DEE0E3;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 0.75rem;
+            gap: 0 !important;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stHorizontalBlock"] {
+            gap: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+        }
+        div[class*="st-key-selectable_table_"][data-testid="stVerticalBlock"] {
+            gap: 0 !important;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stColumn"] {
+            border-right: 1px solid #DEE0E3;
+            border-bottom: 1px solid #DEE0E3;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stColumn"]:last-child {
+            border-right: 0;
+        }
+        .selectable-metric-cell {
+            min-height: 2.25rem;
+            display: flex;
+            align-items: center;
+            padding: 0.35rem 0.65rem;
+            color: #1F2329;
+            font-size: 0.88rem;
+            line-height: 1.25;
+        }
+        .selectable-metric-header {
+            color: #8F959E;
+            background: #FAFAFB;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button {
+            min-height: 2.25rem;
+            width: 100%;
+            justify-content: flex-start !important;
+            padding: 0.35rem 0.65rem;
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+            text-align: left !important;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button > div {
+            width: 100%;
+            justify-content: flex-start !important;
+            text-align: left !important;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button
+        [data-testid="stMarkdownContainer"] {
+            width: 100%;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button p {
+            width: 100%;
+            color: #1F2329;
+            font-size: 0.88rem;
+            font-weight: 400;
+            letter-spacing: 0;
+            line-height: 1.25;
+            text-align: left;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button:hover {
+            border: 0;
+            background: #F2F6FF;
+        }
+        div[class*="st-key-selectable_table_"] [data-testid="stButton"] button:hover p {
+            color: #245BDB;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -74,31 +188,191 @@ def render_big_number(title: str, value: str, caption: str = "") -> None:
     )
 
 
-def render_count_chart(title: str, data: pd.DataFrame, name_col: str | None = None) -> None:
+def render_clickable_big_number(
+    title: str,
+    value: str,
+    caption: str = "",
+    *,
+    key: str,
+) -> bool:
+    """Render a KPI value as a button while retaining the BI number-card look."""
+    with st.container(key=key):
+        st.markdown(
+            f'<div class="clickable-big-card-title">{title}</div>',
+            unsafe_allow_html=True,
+        )
+        clicked = st.button(
+            value,
+            key=f"{key}_button",
+            type="tertiary",
+            width="stretch",
+            help=f"查看{title}对应的项目明细",
+        )
+        if caption:
+            st.markdown(
+                f'<div class="clickable-big-card-caption">{caption}</div>',
+                unsafe_allow_html=True,
+            )
+    return clicked
+
+
+def _capture_chart_selection(widget_key: str, chart_key: str, point_field: str) -> None:
+    """Copy a Plotly selection into one-shot state, then remount the chart.
+
+    Plotly selections persist in widget state. Rotating the widget key after a
+    click makes closing a dialog and clicking the same point again reliable.
+    """
+    state = st.session_state.get(widget_key, {})
+    selection = state.get("selection", {}) if state else {}
+    points = selection.get("points", []) if selection else []
+    if not points:
+        return
+
+    value = points[0].get(point_field)
+    if value is None:
+        return
+    if isinstance(value, (list, tuple)) and len(value) == 1:
+        value = value[0]
+
+    st.session_state[PENDING_CHART_SELECTION] = {
+        "chart_key": chart_key,
+        "value": value,
+    }
+    generation_key = f"_chart_generation_{chart_key}"
+    st.session_state[generation_key] = st.session_state.get(generation_key, 0) + 1
+
+
+def _render_selectable_plotly_chart(
+    fig: go.Figure,
+    *,
+    key: str | None,
+    point_field: str,
+) -> str | None:
+    if key is None:
+        st.plotly_chart(fig, use_container_width=True)
+        return None
+
+    generation_key = f"_chart_generation_{key}"
+    generation = st.session_state.get(generation_key, 0)
+    widget_key = f"{key}_selection_{generation}"
+
+    def capture() -> None:
+        _capture_chart_selection(widget_key, key, point_field)
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        key=widget_key,
+        on_select=capture,
+        selection_mode="points",
+        config={"displayModeBar": False},
+    )
+
+    pending = st.session_state.get(PENDING_CHART_SELECTION)
+    if pending and pending.get("chart_key") == key:
+        st.session_state.pop(PENDING_CHART_SELECTION, None)
+        return str(pending["value"])
+    return None
+
+
+def _render_clickable_pie(
+    fig: go.Figure,
+    *,
+    key: str | None,
+    labels: list[str],
+) -> str | None:
+    """Render a Pie trace with real click events and one-shot component state."""
+    if key is None:
+        st.plotly_chart(fig, use_container_width=True)
+        return None
+
+    generation_key = f"_chart_generation_{key}"
+    generation = st.session_state.get(generation_key, 0)
+    widget_key = f"{key}_click_{generation}"
+    events = plotly_events(
+        fig,
+        click_event=True,
+        select_event=False,
+        hover_event=False,
+        override_height=300,
+        override_width="100%",
+        key=widget_key,
+    )
+    if events:
+        point_number = events[0].get("pointNumber")
+        if point_number is not None and 0 <= int(point_number) < len(labels):
+            st.session_state[PENDING_CHART_SELECTION] = {
+                "chart_key": key,
+                "value": labels[int(point_number)],
+            }
+            st.session_state[generation_key] = generation + 1
+            st.rerun()
+
+    pending = st.session_state.get(PENDING_CHART_SELECTION)
+    if pending and pending.get("chart_key") == key:
+        st.session_state.pop(PENDING_CHART_SELECTION, None)
+        return str(pending["value"])
+    return None
+
+
+def render_count_chart(
+    title: str,
+    data: pd.DataFrame,
+    name_col: str | None = None,
+    *,
+    key: str | None = None,
+) -> str | None:
     if data is None or data.empty:
         st.info(f"{title}: 暂无数据")
-        return
+        return None
     name_col = name_col or data.columns[0]
-    fig = px.pie(data, names=name_col, values="数量", title=title, color_discrete_sequence=PALETTE)
+    chart_data = data[[name_col, "数量"]].copy()
+    chart_data["数量"] = pd.to_numeric(chart_data["数量"], errors="coerce").fillna(0)
+    total = float(chart_data["数量"].sum())
+    if total <= 0:
+        st.info(f"{title}: 暂无数据")
+        return None
+
+    labels = chart_data[name_col].astype(str).tolist()
+    values = [float(value) for value in chart_data["数量"].tolist()]
+    colors = [PALETTE[index % len(PALETTE)] for index in range(len(labels))]
+    # Build from Python lists so the older click-component frontend receives
+    # plain JSON arrays instead of Plotly 6 typed-array payloads.
+    fig = go.Figure(
+        go.Pie(
+            labels=labels,
+            values=values,
+            marker=dict(colors=colors),
+            sort=False,
+        )
+    )
     fig.update_traces(
         texttemplate="%{label}: %{value} (%{percent:.2%})",
         textposition="outside",
         textfont_size=12,
     )
     fig.update_layout(
+        title=title,
         showlegend=False,
         title_font=dict(size=15, color="#1F2329"),
         margin=dict(t=48, b=24, l=24, r=24),
         height=300,
         paper_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    return _render_clickable_pie(fig, key=key, labels=labels)
 
 
-def render_bar_chart(title: str, data: pd.DataFrame, x: str, y: str) -> None:
+def render_bar_chart(
+    title: str,
+    data: pd.DataFrame,
+    x: str,
+    y: str,
+    *,
+    key: str | None = None,
+) -> str | None:
     if data is None or data.empty or x not in data.columns or y not in data.columns:
         st.info(f"{title}: 暂无数据")
-        return
+        return None
     fig = px.bar(data.sort_values(x), x=x, y=y, title=title, text_auto=True)
     fig.update_traces(marker_color=BLUE, textposition="outside", textfont=dict(color=BLUE))
     fig.update_layout(
@@ -110,16 +384,136 @@ def render_bar_chart(title: str, data: pd.DataFrame, x: str, y: str) -> None:
         xaxis_title=None,
         yaxis_title=None,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    return _render_selectable_plotly_chart(fig, key=key, point_field="x")
 
 
-def render_multi_bar_chart(title: str, data: pd.DataFrame, x: str, y: str, series: str) -> None:
+def render_deviation_ranking_chart(
+    title: str,
+    data: pd.DataFrame,
+    category_col: str,
+    value_col: str,
+    *,
+    key: str,
+) -> str | None:
+    """Clickable horizontal percentage ranking used for unit drill-down."""
+    if (
+        data is None
+        or data.empty
+        or category_col not in data.columns
+        or value_col not in data.columns
+    ):
+        st.info(f"{title}: 暂无数据")
+        return None
+
+    ranked = data[[category_col, value_col]].copy()
+    ranked[value_col] = pd.to_numeric(ranked[value_col], errors="coerce")
+    ranked = ranked.dropna(subset=[value_col]).sort_values(value_col)
+    colors = [BLUE if value >= 0 else "#F54A45" for value in ranked[value_col]]
+    fig = go.Figure(
+        go.Bar(
+            x=ranked[value_col],
+            y=ranked[category_col].astype(str),
+            orientation="h",
+            marker_color=colors,
+            hovertemplate="%{y}<br>进度偏差：%{x:.2%}<extra></extra>",
+        )
+    )
+    for category, value in zip(ranked[category_col].astype(str), ranked[value_col]):
+        fig.add_annotation(
+            x=1.01,
+            xref="paper",
+            y=category,
+            yref="y",
+            text=f"{value:.2%}",
+            showarrow=False,
+            xanchor="left",
+            font=dict(size=11, color="#646A73"),
+        )
+    fig.update_layout(
+        title=title,
+        title_font=dict(size=15, color="#1F2329"),
+        margin=dict(t=48, b=24, l=24, r=86),
+        height=max(300, 88 + 42 * len(ranked)),
+        xaxis=dict(title=None, tickformat=".0%", zeroline=True, zerolinecolor="#C9CDD4"),
+        yaxis=dict(title=None),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+    )
+    return _render_selectable_plotly_chart(fig, key=key, point_field="y")
+
+
+def render_horizontal_ranking_chart(
+    title: str,
+    data: pd.DataFrame,
+    category_col: str,
+    value_col: str,
+    *,
+    key: str,
+    value_format: str = ",.2f",
+    max_rows: int | None = None,
+) -> str | None:
+    """Clickable horizontal ranking for money/count metrics."""
+    if data is None or data.empty or category_col not in data.columns or value_col not in data.columns:
+        st.info(f"{title}: 暂无数据")
+        return None
+    ranked = data[[category_col, value_col]].copy()
+    ranked[value_col] = pd.to_numeric(ranked[value_col], errors="coerce")
+    ranked = ranked.dropna(subset=[value_col]).sort_values(value_col, ascending=False)
+    if max_rows is not None:
+        ranked = ranked.head(max_rows)
+    ranked = ranked.sort_values(value_col)
+    fig = go.Figure(
+        go.Bar(
+            x=ranked[value_col],
+            y=ranked[category_col].astype(str),
+            orientation="h",
+            marker_color=BLUE,
+            text=[format(float(value), value_format) for value in ranked[value_col]],
+            textposition="outside",
+            cliponaxis=False,
+            customdata=ranked[category_col].astype(str),
+            hovertemplate=f"%{{y}}<br>{value_col}：%{{x:{value_format}}}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        title=title,
+        title_font=dict(size=15, color="#1F2329"),
+        margin=dict(t=48, b=24, l=24, r=96),
+        height=max(300, 88 + 34 * len(ranked)),
+        xaxis=dict(title=None, visible=False),
+        yaxis=dict(title=None),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        showlegend=False,
+    )
+    return _render_selectable_plotly_chart(fig, key=key, point_field="customdata")
+
+
+def render_multi_bar_chart(
+    title: str,
+    data: pd.DataFrame,
+    x: str,
+    y: str,
+    series: str,
+    *,
+    key: str | None = None,
+) -> tuple[str, str] | None:
     """Grouped bars, one color per series (long-form input)."""
     if data is None or data.empty:
         st.info(f"{title}: 暂无数据")
-        return
+        return None
+    chart_data = data.copy()
+    chart_data["_drilldown_key"] = (
+        chart_data[x].astype(str) + "|||" + chart_data[series].astype(str)
+    )
     fig = px.bar(
-        data, x=x, y=y, color=series, barmode="group",
+        chart_data,
+        x=x,
+        y=y,
+        color=series,
+        barmode="group",
+        custom_data=["_drilldown_key"],
         color_discrete_sequence=PALETTE, text_auto=True, title=title,
     )
     fig.update_traces(textposition="outside", cliponaxis=False)
@@ -133,7 +527,11 @@ def render_multi_bar_chart(title: str, data: pd.DataFrame, x: str, y: str, serie
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    selected = _render_selectable_plotly_chart(fig, key=key, point_field="customdata")
+    if selected is None or "|||" not in selected:
+        return None
+    category, metric = selected.split("|||", 1)
+    return category, metric
 
 
 def render_ratio_bar_chart(
@@ -146,14 +544,16 @@ def render_ratio_bar_chart(
     denominator_label: str = "应完成（分母）",
     numerator_label: str = "已完成（分子）",
     rate_label: str = "完成率",
-) -> None:
+    *,
+    key: str | None = None,
+) -> tuple[str, str] | None:
     """Grouped denominator/numerator bars with the completion rate above each group."""
     needed = [category_col, denominator_col, numerator_col, rate_col]
     if data is None or data.empty or any(col not in data.columns for col in needed):
         st.info(f"{title}: 暂无数据")
-        return
+        return None
 
-    categories = data[category_col].astype(str)
+    categories = data[category_col].astype(str).tolist()
     fig = go.Figure()
     fig.add_bar(
         name=denominator_label,
@@ -163,6 +563,7 @@ def render_ratio_bar_chart(
         text=data[denominator_col],
         textposition="outside",
         cliponaxis=False,
+        customdata=[f"{category}|||denominator" for category in categories],
     )
     fig.add_bar(
         name=numerator_label,
@@ -172,16 +573,19 @@ def render_ratio_bar_chart(
         text=data[numerator_col],
         textposition="outside",
         cliponaxis=False,
+        customdata=[f"{category}|||numerator" for category in categories],
     )
-    top = float(data[denominator_col].max())
-    for cat, rate in zip(categories, data[rate_col]):
-        fig.add_annotation(
-            x=cat,
-            y=top * 1.22,
-            text=f"{rate_label} <b>{float(rate):.1%}</b>",
-            showarrow=False,
-            font=dict(size=12, color=BLUE),
-        )
+    top = max(float(data[denominator_col].max()), 1.0)
+    fig.add_scatter(
+        x=categories,
+        y=[top * 1.22] * len(categories),
+        mode="text",
+        text=[f"{rate_label} <b>{float(rate):.1%}</b>" for rate in data[rate_col]],
+        textfont=dict(size=12, color=BLUE),
+        customdata=[f"{category}|||rate" for category in categories],
+        hovertemplate=f"%{{x}}<br>{rate_label}：%{{text}}<extra></extra>",
+        showlegend=False,
+    )
     fig.update_layout(
         title=title,
         title_font=dict(size=15, color="#1F2329"),
@@ -194,7 +598,11 @@ def render_ratio_bar_chart(
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    selected = _render_selectable_plotly_chart(fig, key=key, point_field="customdata")
+    if selected is None or "|||" not in selected:
+        return None
+    category, measure = selected.split("|||", 1)
+    return category, measure
 
 
 def render_metric_table(title: str, data: pd.DataFrame) -> None:
@@ -203,6 +611,58 @@ def render_metric_table(title: str, data: pd.DataFrame) -> None:
         st.info("暂无数据")
         return
     st.dataframe(format_table_for_display(data), use_container_width=True, hide_index=True)
+
+
+def render_selectable_metric_table(
+    title: str,
+    data: pd.DataFrame,
+    *,
+    key: str,
+    clickable_columns: set[str] | None = None,
+) -> tuple[int, str] | None:
+    """Render a table whose metric cells are reliable, repeatable drill-down buttons."""
+    st.subheader(title)
+    if data is None or data.empty:
+        st.info("暂无数据")
+        return None
+
+    display = format_table_for_display(data)
+    selected: tuple[int, str] | None = None
+    column_count = len(display.columns)
+    with st.container(key=f"selectable_table_{key}"):
+        header_columns = st.columns(column_count, gap=None)
+        for column_index, column_name in enumerate(display.columns):
+            with header_columns[column_index]:
+                st.markdown(
+                    f'<div class="selectable-metric-cell selectable-metric-header">'
+                    f"{escape(str(column_name))}</div>",
+                    unsafe_allow_html=True,
+                )
+
+        for row_position, (_, row) in enumerate(display.iterrows()):
+            row_columns = st.columns(column_count, gap=None)
+            for column_index, column_name in enumerate(display.columns):
+                value = str(row[column_name])
+                is_clickable = (
+                    str(column_name) in clickable_columns
+                    if clickable_columns is not None
+                    else column_index > 0
+                )
+                with row_columns[column_index]:
+                    if not is_clickable:
+                        st.markdown(
+                            f'<div class="selectable-metric-cell">{escape(value)}</div>',
+                            unsafe_allow_html=True,
+                        )
+                    elif st.button(
+                        value,
+                        key=f"metric_cell_{key}_{row_position}_{column_index}",
+                        type="tertiary",
+                        width="stretch",
+                        help=f"查看{value}对应的项目明细",
+                    ):
+                        selected = (row_position, str(column_name))
+    return selected
 
 
 def format_table_for_display(data: pd.DataFrame) -> pd.DataFrame:
@@ -255,7 +715,7 @@ def format_metric_value_column(data: pd.DataFrame) -> None:
 def should_format_as_percent(column: str) -> bool:
     if "分类" in column or "范围" in column:
         return False
-    return any(token in column for token in ["率", "当前进度", "时间进度", "进度偏差"])
+    return any(token in column for token in ["率", "当前进度", "时间进度", "进度偏差", "匹配度"])
 
 
 def should_format_as_money(column: str) -> bool:

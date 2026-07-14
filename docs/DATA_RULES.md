@@ -213,21 +213,25 @@ Business units are derived **dynamically** from the data (comma-split of
 - 当年之后的年份：合并为整年 `%y年`（如 `27年`、`28年`）。
 - 到了下一个自然年自动前移：2027 年时 27 年按月、28 年及以后按年。
 
-## 13. Region Ranking Drill-down
+## 13. Chart Drill-down
 
-业务部进度偏差排名表下方为每个业务部提供一个按钮，点击弹出该业务部的项目实施
-进度明细（项目名称/项目经理/当前进度/时间进度/进度偏差/偏差分类/交付状态/
-预计交付日期）。业务部归属沿用逗号拆分包含匹配（多区域项目在每个区域都出现）。
+可明确映射回项目的图表直接点击图形下钻，不再显示业务部按钮区：
 
-实现说明：不要用 `st.dataframe(on_select=...)` 做点击下钻——dataframe 换 key
-重挂载后首次行选择的 selection 不回传后端（前端已勾选但 dialog 不弹），导致
-“关闭后需再点一次”。改用每业务部一个 `st.button`，按钮事件干净、可反复触发。
+- 分类饼图：按图中分类精确筛选；验收/交付二分类按 `交付状态` 关键词筛选。
+- 预计验收/交付年月柱图：使用与图表相同的按月/未来年份折叠标签筛选。
+- 当年/跨年/已验收偏差分类图：先限定对应交付分组，再按偏差分类筛选。
+- 业务部进度偏差排名图：先限定当年交付分组，再按逗号拆分后的业务单元包含匹配。
+- 已交付未验收业务部排名图：先限定 `已交付` + `未验收`，再按业务单元匹配。
 
-弹窗展示该业务部项目的全部原始列（`display_columns`：按列顺序排除
+实现说明：普通 Plotly Pie 主要产生 click 事件，Streamlit 原生 `on_select` 无法稳定
+接收，因此饼图使用 `streamlit-plotly-events==0.0.6`；柱图使用原生 selection。
+两者点击后都轮换 widget/component key，把事件变成一次性事件，确保弹窗关闭后点击
+同一扇区或同一柱仍会再次触发。Plotly 6 传给旧组件时必须用 `go.Pie` + Python list
+生成普通 JSON 数组，不能直接传 `px.pie` 的 typed-array 数据。
+
+弹窗展示所选项目的全部原始列（`display_columns`：按列顺序排除
 `DERIVED_HELPER_COLUMNS` = 执行比例是否虚拟 + 6 个派生应/已归档列）。不要把
-“原始列清单”存进被 `@st.cache_data` 缓存的 dataclass：缓存键按函数体哈希，
-函数体不变时会复用旧版本序列化的对象，新增字段会 AttributeError。用固定排除
-集合从当前 DataFrame 现算，天然免疫缓存陈旧问题。
+“原始列清单”存进被 `@st.cache_data` 缓存的 dataclass；应从当前 DataFrame 现算。
 
 ## 14. Formula (Audit) Export
 
@@ -256,3 +260,153 @@ Columns: `人员`, `净执行合同额`, `所属区域/业务单元`, `数据说
 - Person appears in execution data but not in `人员关系表`: `执行名单补充-临时归属待确认`
 - No `人员关系表` uploaded at all: `无人员关系表-区域按项目推断`
 
+## 16. 26年人均净合同额（人员3口径）
+
+This is a separate business metric from section 4. Do not reuse the legacy
+`收入 * (1 - B-服务采购比例)` result as the 2026 personnel-3 result.
+
+Required input sheets:
+
+- `input_实施进度表` (legacy alias: `实施进度底表`)
+- `input_外委更新金额`
+- `input_人员关系表` (legacy alias: `人员关系表`)
+
+Columns are resolved by header text, never by Excel column position. The new
+personnel-3 calculation must not create virtual equal-split execution ratios.
+
+Outsourced-subproject states:
+
+- `已匹配`: included in accepted outsourced amount.
+- `需人工确认`: candidate is shown but excluded until explicitly confirmed.
+- `未匹配`: no credible candidate; excluded and reported as an exception.
+
+Matching priority is project-number exact match, normalized-name exact match,
+then fuzzy candidate generation. Explicit confirmations override generated
+status only when the specified implementation project exists.
+
+Project formulas:
+
+```text
+净额取数基数 = 中标/合同金额（非空且非0） else 预估项目金额
+最终采信服务采购金额 = 已匹配外委子项目金额合计（若>0） else B-服务采购比例 * 净额取数基数
+项目净执行合同额 = 净额取数基数 - 最终采信服务采购金额
+26年净执行合同额 = 项目净执行合同额 * MAX(0, 26/12/31预计进度 - 1/1进度)
+```
+
+Missing start or acceptance date gives a 2026-12-31 expected progress of 100%.
+Projects whose original manager region contains `绿链` or `数字化市场团队`
+remain in calculation detail but have `是否纳入口径=否` and included amount 0.
+When a regional team and `电碳市场团队` coexist, remove the latter from the
+project net attribution department because it is guidance-only.
+
+Personnel allocation and three-level outputs:
+
+- Build the personnel-3 list only from `人员 3` and `所属区域 3`, deduplicate by
+  person, and sort by person name for stable output.
+- Unpivot `执行人员1-5` only when both person and corresponding ratio are filled.
+  Never infer a ratio from `A-执行人员` in this metric.
+- Allocation amount is `纳入口径26年净执行合同额 * 执行比例`. People outside the
+  personnel-3 list remain in allocation detail but do not enter person output.
+- Company and department amounts come directly from project detail, not allocation.
+- Company denominator is the deduplicated personnel-3 count. Department denominator
+  is the personnel-3 count whose `所属区域 3` equals that department.
+- Person output includes every personnel-3 member; no participation produces amount 0
+  and note `未填报分摊比例或未参与`.
+
+Required exceptions include fuzzy/unmatched outsourcing, missing person ratios,
+filled-ratio total not equal to 100%, people outside personnel-3, missing project IDs,
+and excluded projects. Missing ratios do not reduce company/department project amount.
+
+The 0713 source workbook has a formula defect in personal allocation: project-detail
+IDs can be numeric while allocation IDs are text, so Excel `MATCH` returns no result
+and all cached personal amounts remain 0 even after full recalculation. The application
+normalizes IDs/uses row-linked project keys. Formula export must do the same and must
+not copy that mixed-type `MATCH` formula unchanged.
+
+Personnel-3 exports use the current matching-editor decisions and are separate from
+the legacy four-section downloads. Both value and formula workbooks contain, in order:
+
+- `output_`: summary, company, department, person, and exceptions.
+- `calculation_`: outsourced matching, project net detail, personnel allocation,
+  personnel-3 list, and checks.
+- `input_`: untouched implementation, outsourced amount, and personnel relation tables.
+
+The formula workbook marks formula headers orange (`#C65911`) and formula cells pale
+yellow (`#FFF2CC`). Project IDs in project and allocation calculation sheets are written
+as normalized text, and allocation uses `SUMIF` over those text keys.
+
+## 17. KPI and Summary-Cell Drill-down
+
+可明确对应项目范围的大数字均直接打开项目明细，显示值和下钻范围必须共用同一口径：
+
+- `执行项目总数`：当前筛选后的全部底表行。
+- 新签/遗留未验收平均进度：先按 `交付状态` 包含 `未验收`，再按
+  `执行项目类型` 包含 `新签`/`遗留`。
+- 所有未验收平均偏差：`交付状态` 包含 `未验收`。
+- 归档完成度：所有 `当前进度 >= 10%`、已经触发至少一个归档义务的项目。
+- 当年/跨年/已验收卡片：复用 `delivery_group_mask` 的对应项目分组。
+- 当年交付率：明细展示分母，即 `预计交付日期` 年份等于统计年的应交付项目。
+- 异常通报阶段卡片：分别复用该阶段 `应归档=1`、`应归档=1 且未质控`、
+  `应归档=1 且已归档=0` 的项目范围。
+
+进度汇总三表的数字单元格下钻：
+
+- `公司整体`：使用该表指标的全公司项目范围。
+- 业务单元行：在指标范围内再用 `projects_of_unit` 做逗号拆分后的区域包含匹配。
+- `项目数` 只纳入 `A-项目名称` 非空行；未验收/已验收严格沿用第 11 节状态口径。
+- 数字为 `0` 时仍可点击，弹窗显示 `共 0 个项目 / 暂无数据`，便于核对。
+
+实现采用 `render_clickable_big_number` 和 `render_selectable_metric_table`。后者使用
+透明数字按钮构造表格，不依赖 Streamlit canvas dataframe 的单元格选择事件；这是为了
+保证关闭弹窗后点击同一个数字仍能稳定再次触发。
+
+## 18. Archive, Alert, and Ranking Drill-down (2026-07-14)
+
+### 归档视角一
+
+点击分母柱：返回该阶段进度范围内的全部应归档项目；点击分子柱：在同一范围内按
+第 5 节递进规则返回已完成项目。点击顶部归档率文字：返回该比率的完整分母项目。
+`整体` 为启动/中期/终期三个互斥当前阶段项目范围的合并。
+
+反查函数：`archive_view_1_project_subset(raw, stage, completed=...)`。
+
+### 归档视角二
+
+点击分母柱：返回达到该环节阈值的归档环节记录；点击分子柱：再限定本环节归档列
+为 `是`。点击顶部完成率文字：返回该比率的完整分母环节记录。
+
+`整体` 是三类环节记录的纵向合并，**不能按项目去重**。例如一个进度 100% 的项目会
+分别产生启动/中期/终期三条记录；明细增加 `归档环节` 列，因此记录数必须与图中
+整体分母/分子一致。
+
+反查函数：`archive_view_2_record_subset(raw, node, completed=...)`。
+
+### 异常通报
+
+- `各阶段异常情况对比`：点击任意柱，按 `阶段 + 指标` 返回项目。
+- `项目个数` 对应该阶段 `应归档=1`；`未完成质控个数` 对应应归档且质控不为 `是`；
+  `未完成归档个数` 对应应归档且 `已归档=0`。
+- 业务部门异常表：点击 `记录数` 后，在该阶段区域表的 focus 范围内再用
+  `projects_of_unit` 做业务单元包含匹配。存在质控字段时 focus 为未完成质控；
+  缺少质控字段时回退为未完成归档。
+
+反查函数：`stage_alert_project_subsets(raw, stage)`；`build_stage_alerts` 也必须调用
+同一函数，避免展示数字和弹窗范围漂移。
+
+### 项目进度偏差排名
+
+跨年项目偏差排名的项目名、偏差值均可点击。按排名表保留的原始 DataFrame index
+定位 `cross_projects` 中的单条底表记录，不仅按项目名称匹配，避免重名项目串行。
+
+## 19. Personnel-3 Upload, Confirmation, and Drill-down (2026-07-14)
+
+- 同一上传文件可同时服务旧四章节和人员3第五章节；人员3输入缺失或校验失败不得阻断旧报表。
+- 第五章节按三张 `input_` 表全量计算，不套用页面顶部旧报表筛选。
+- 外委初判严格保留 `已匹配 / 需人工确认 / 未匹配`。人工把候选改为 `已匹配` 时，
+  必须同时存在有效的对应实施项目编号，随后立即重算外委采信、项目净额和三级人效。
+- `系统初判` 与 `当前确认结果` 分开显示；重置匹配恢复系统初判。
+- 公司 KPI 明细使用纳入口径项目或人员3名单；部门明细分项目和人员两个标签；个人明细
+  使用其显式比例分摊记录；项目明细分项目净额、外委子项目、人员分摊三个标签。
+- 匹配状态和异常分布点击后只返回对应状态/异常类型的记录。所有弹窗关闭后应允许再次点击。
+- 0713 原始 input 的保守初判为 `28/10/24`，历史 calculation 确认后为 `31/7/24`；
+  两者差异来自三条低置信匹配，不得用旧输出静默改变新上传文件的初判。

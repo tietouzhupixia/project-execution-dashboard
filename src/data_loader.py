@@ -7,7 +7,7 @@ import pandas as pd
 
 
 PRIMARY_SHEET = "实施进度底表"
-RELATION_SHEET = "人员关系表"
+RELATION_SHEETS = ("input_人员关系表", "人员关系表")
 
 KEY_COLUMNS = ["A-项目名称", "当前进度", "交付状态"]
 
@@ -29,8 +29,10 @@ def load_workbook(file: str | BinaryIO) -> WorkbookData:
     sheet = detect_raw_sheet(xls)
     raw = pd.read_excel(xls, sheet_name=sheet)
     relation = None
-    if RELATION_SHEET in xls.sheet_names:
-        relation = pd.read_excel(xls, sheet_name=RELATION_SHEET)
+    for relation_sheet in RELATION_SHEETS:
+        if relation_sheet in xls.sheet_names:
+            relation = pd.read_excel(xls, sheet_name=relation_sheet)
+            break
 
     warnings = []
     missing = [col for col in KEY_COLUMNS if col not in raw.columns]
