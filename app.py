@@ -169,30 +169,61 @@ if all_warnings:
         for warning in all_warnings:
             st.warning(warning)
 
-info_col, dl_col1, dl_col2 = st.columns([2, 1, 1])
-with info_col:
-    scope = f"筛选后 {len(raw)} / 共 {len(workbook.raw)}" if is_filtered else f"{len(raw)}"
-    st.caption(f"识别底表：{workbook.source_sheet}；项目数：{scope}")
 today = f"{pd.Timestamp.now():%Y%m%d}"
 mime_xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-with dl_col1:
-    st.download_button(
-        "下载分析结果",
-        data=export_payload,
-        file_name=f"项目执行管理分析_{today}.xlsx",
-        mime=mime_xlsx,
-        use_container_width=True,
-        help="数值版：直接查看计算好的结果表。",
-    )
-with dl_col2:
-    st.download_button(
-        "下载核算版（含公式）",
-        data=formula_payload,
-        file_name=f"项目执行管理分析_核算版_{today}.xlsx",
-        mime=mime_xlsx,
-        use_container_width=True,
-        help="公式版：分析单元格为活公式，指向实施进度底表，可人工核对计算逻辑。",
-    )
+download_slot = st.container()
+
+
+def render_download_bar(
+    value_data: bytes,
+    formula_data: bytes,
+    *,
+    complete_personnel3: bool,
+) -> None:
+    with download_slot:
+        info_col, dl_col1, dl_col2 = st.columns([2, 1, 1])
+        with info_col:
+            scope = (
+                f"筛选后 {len(raw)} / 共 {len(workbook.raw)}"
+                if is_filtered
+                else f"{len(raw)}"
+            )
+            st.caption(f"识别底表：{workbook.source_sheet}；项目数：{scope}")
+        if complete_personnel3:
+            value_label = "下载完整结果（数值版）"
+            value_name = f"26年人均净合同额_人员3口径_{today}.xlsx"
+            value_help = "数值版：包含全部 input_、calculation_ 和 output_ 表。"
+            formula_label = "下载完整核算版（含公式）"
+            formula_name = f"26年人均净合同额_人员3口径_核算版_{today}.xlsx"
+            formula_help = (
+                "公式版：包含全部 5 张 output_、5 张 calculation_ 和 3 张 input_；"
+                "橙色表头与浅黄色单元格为活公式。"
+            )
+        else:
+            value_label = "下载分析结果"
+            value_name = f"项目执行管理分析_{today}.xlsx"
+            value_help = "数值版：直接查看计算好的原四章节结果表。"
+            formula_label = "下载核算版（含公式）"
+            formula_name = f"项目执行管理分析_核算版_{today}.xlsx"
+            formula_help = "公式版：原四章节分析单元格为活公式。"
+        with dl_col1:
+            st.download_button(
+                value_label,
+                data=value_data,
+                file_name=value_name,
+                mime=mime_xlsx,
+                use_container_width=True,
+                help=value_help,
+            )
+        with dl_col2:
+            st.download_button(
+                formula_label,
+                data=formula_data,
+                file_name=formula_name,
+                mime=mime_xlsx,
+                use_container_width=True,
+                help=formula_help,
+            )
 if is_filtered:
     st.info("当前为筛选视图：以下所有图表、表格与导出文件均按筛选后的项目计算。")
 
@@ -933,8 +964,10 @@ render_section_banner("五、26年人均净合同额（人员3口径）")
 
 if personnel3_parse_error:
     st.error(f"人员3口径输入解析失败：{personnel3_parse_error}")
+    render_download_bar(export_payload, formula_payload, complete_personnel3=False)
 elif personnel3_inputs is None or not personnel3_inputs.ready:
     st.info("当前文件未包含完整的人员3口径输入，原四章节仍可正常使用。")
+    render_download_bar(export_payload, formula_payload, complete_personnel3=False)
     if personnel3_inputs is not None:
         with st.expander("查看缺失内容"):
             for error in personnel3_inputs.errors:
@@ -1043,40 +1076,23 @@ else:
         )
     except Exception as exc:  # noqa: BLE001 - 第五章节失败不影响原报表
         st.error(f"人员3口径计算失败：{type(exc).__name__}: {exc}")
+        render_download_bar(export_payload, formula_payload, complete_personnel3=False)
     else:
+        render_download_bar(
+            personnel3_value_payload,
+            personnel3_formula_payload,
+            complete_personnel3=True,
+        )
         st.caption("本章节按三张 input 表的全量口径计算，不受页面顶部进度筛选影响。")
         current_match_counts = "；".join(
             f"{state} {int(count)}"
             for state, count in personnel3_matches["匹配状态"].value_counts().items()
         )
         st.caption(f"当前确认结果：{current_match_counts}")
-        export_info, export_value, export_formula = st.columns([2, 1, 1])
-        with export_info:
-            st.caption(
-                "以后仅需上传 input_实施进度表、input_外委更新金额、input_人员关系表；"
-                "完整核算工作簿会导出全部 calculation_ / output_ 表及可追溯公式。"
-            )
-        with export_value:
-            st.download_button(
-                "下载人员3结果（数值版）",
-                data=personnel3_value_payload,
-                file_name=f"26年人均净合同额_人员3口径_{today}.xlsx",
-                mime=mime_xlsx,
-                use_container_width=True,
-                help="数值版：保存当前确认后的全部输入、计算明细、结果、异常与核验。",
-            )
-        with export_formula:
-            st.download_button(
-                "下载完整核算工作簿（含公式）",
-                data=personnel3_formula_payload,
-                file_name=f"26年人均净合同额_人员3口径_核算版_{today}.xlsx",
-                mime=mime_xlsx,
-                use_container_width=True,
-                help=(
-                    "公式版：包含全部 5 张 output_、5 张 calculation_ 和 3 张 input_；"
-                    "橙色表头与浅黄色单元格为活公式。"
-                ),
-            )
+        st.caption(
+            "以后仅需上传 input_实施进度表、input_外委更新金额、input_人员关系表；"
+            "页面顶部可下载全部 calculation_ / output_ 表及可追溯公式。"
+        )
         included_projects = personnel3_project_detail.loc[
             personnel3_project_detail["是否纳入口径"].eq("是")
         ].copy()
