@@ -13,6 +13,7 @@ from src.charts import (
     render_big_number,
     render_clickable_big_number,
     render_count_chart,
+    render_delivery_band,
     render_deviation_ranking_chart,
     render_group_banner,
     render_horizontal_ranking_chart,
@@ -548,15 +549,24 @@ delivery_dates = (
 )
 due_current_year_projects = raw.loc[delivery_dates.dt.year.eq(delivery["ref_year"])].copy()
 
-# —— 未验收 · 当年交付
-label_col, body_col = st.columns([1, 9])
-with label_col:
-    render_row_label("未验收", "当年交付")
+# 参考仪表盘采用 2:4:6 的“状态 / 进度 / 偏差”内容网格。
+status_header, progress_header, deviation_header = st.columns([2, 4, 6])
+with status_header:
+    render_group_banner("交付状态", grid_header=True)
+with progress_header:
+    render_group_banner("交付进度", grid_header=True)
+with deviation_header:
+    render_group_banner("交付偏差", grid_header=True)
+
+# —— 未验收（状态带跨当年交付与跨年交付两个内容组）
+status_col, body_col = st.columns([2, 10])
+with status_col:
+    render_delivery_band(["未", "验收"], "unaccepted")
 with body_col:
     current = delivery["current_year"]
-    b1, b2, b3, b4 = st.columns([2, 2, 2, 4])
-    with b1:
-        with st.container(border=True):
+    count_col, detail_col = st.columns([2, 8])
+    with count_col:
+        with st.container(border=True, key="delivery-tall-card-current"):
             render_project_kpi(
                 "当年交付项目个数",
                 f"{current['count']}",
@@ -564,198 +574,168 @@ with body_col:
                 key="drilldown_big_current_project_count",
                 caption="含逾期未交付项目",
             )
-    with b2:
-        with st.container(border=True):
-            render_project_kpi(
-                "平均进度",
-                pct(current["avg_progress"]),
-                current_projects,
-                key="drilldown_big_current_avg_progress",
-                context="当年交付 · 平均进度",
-            )
-    with b3:
-        with st.container(border=True):
-            render_project_kpi(
-                "平均进度偏差",
-                pct(current["avg_deviation"], 1),
-                current_projects,
-                key="drilldown_big_current_avg_deviation",
-                caption="实际完成进度-时间进度",
-                context="当年交付 · 平均进度偏差",
-            )
-    with b4:
-        with st.container(border=True):
-            selected = render_count_chart(
-                "进度偏差类型分布（在执行项目）",
-                current["deviation_type"],
-                "进度偏差分类",
-                key="current_deviation_type",
-            )
-            if selected is not None:
-                show_project_detail(
-                    f"当年交付 · 进度偏差分类：{selected}",
-                    project_subset_by_value(current_projects, "进度偏差分类", selected),
+    with detail_col:
+        avg_col, deviation_col, distribution_col = st.columns([2, 2, 4])
+        with avg_col:
+            with st.container(border=True, key="delivery-top-kpi-current-avg"):
+                render_project_kpi(
+                    "平均进度", pct(current["avg_progress"]), current_projects,
+                    key="drilldown_big_current_avg_progress",
+                    context="当年交付 · 平均进度",
                 )
-    g1, g2 = st.columns(2)
-    with g1:
-        with st.container(border=True):
-            selected = render_bar_chart(
-                "预计交付年月",
-                current["delivery_month"],
-                "年月",
-                "数量",
-                key="current_delivery_month",
-            )
-            if selected is not None:
-                show_project_detail(
-                    f"当年交付 · 预计交付年月：{selected}",
-                    project_subset_by_month(
-                        current_projects,
-                        "预计交付日期",
-                        selected,
-                        collapsed=False,
-                    ),
+        with deviation_col:
+            with st.container(border=True, key="delivery-top-kpi-current-deviation"):
+                render_project_kpi(
+                    "平均进度偏差", pct(current["avg_deviation"], 1), current_projects,
+                    key="drilldown_big_current_avg_deviation",
+                    caption="实际完成进度-时间进度",
+                    context="当年交付 · 平均进度偏差",
                 )
-    with g2:
-        with st.container(border=True):
-            ranking = current["region_deviation_ranking"]
-            selected = render_deviation_ranking_chart(
-                "业务部进度偏差排名",
-                ranking,
-                "业务单元",
-                "进度偏差（平均值）",
-                key="current_unit_deviation_ranking",
-            )
-            if selected is not None:
-                show_project_detail(
-                    f"当年交付 · 业务单元：{selected}",
-                    projects_of_unit(current_projects, selected),
+        with distribution_col:
+            with st.container(border=True):
+                selected = render_count_chart(
+                    "进度偏差类型分布（在执行项目）", current["deviation_type"],
+                    "进度偏差分类", key="current_deviation_type",
                 )
+                if selected is not None:
+                    show_project_detail(
+                        f"当年交付 · 进度偏差分类：{selected}",
+                        project_subset_by_value(current_projects, "进度偏差分类", selected),
+                    )
+        month_col, ranking_col = st.columns([2, 6])
+        with month_col:
+            with st.container(border=True):
+                selected = render_bar_chart(
+                    "预计交付年月", current["delivery_month"], "年月", "数量",
+                    key="current_delivery_month",
+                )
+                if selected is not None:
+                    show_project_detail(
+                        f"当年交付 · 预计交付年月：{selected}",
+                        project_subset_by_month(
+                            current_projects, "预计交付日期", selected, collapsed=False,
+                        ),
+                    )
+        with ranking_col:
+            with st.container(border=True):
+                ranking = current["region_deviation_ranking"]
+                selected = render_deviation_ranking_chart(
+                    "业务部进度偏差排名", ranking, "业务单元",
+                    "进度偏差（平均值）", key="current_unit_deviation_ranking",
+                )
+                if selected is not None:
+                    show_project_detail(
+                        f"当年交付 · 业务单元：{selected}",
+                        projects_of_unit(current_projects, selected),
+                    )
 
-# —— 未验收 · 跨年交付
-label_col, body_col = st.columns([1, 9])
-with label_col:
-    render_row_label("未验收", "跨年交付")
-with body_col:
+    # —— 跨年交付
     cross = delivery["cross_year"]
-    b1, b2, b3, b4 = st.columns([2, 2, 2, 4])
-    with b1:
-        with st.container(border=True):
+    count_col, detail_col = st.columns([2, 8])
+    with count_col:
+        with st.container(border=True, key="delivery-tall-card-cross"):
             render_project_kpi(
-                "跨年交付项目个数",
-                f"{cross['count']}",
-                cross_projects,
+                "跨年交付项目个数", f"{cross['count']}", cross_projects,
                 key="drilldown_big_cross_project_count",
             )
-    with b2:
-        with st.container(border=True):
-            render_project_kpi(
-                "平均进度",
-                pct(cross["avg_progress"]),
-                cross_projects,
-                key="drilldown_big_cross_avg_progress",
-                context="跨年交付 · 平均进度",
-            )
-    with b3:
-        with st.container(border=True):
-            render_project_kpi(
-                "平均进度偏差",
-                pct(cross["avg_deviation"], 1),
-                cross_projects,
-                key="drilldown_big_cross_avg_deviation",
-                caption="实际完成进度-时间进度",
-                context="跨年交付 · 平均进度偏差",
-            )
-    with b4:
-        with st.container(border=True):
-            selected = render_count_chart(
-                "偏差类型分布",
-                cross["deviation_type"],
-                "进度偏差分类",
-                key="cross_deviation_type",
-            )
-            if selected is not None:
-                show_project_detail(
-                    f"跨年交付 · 进度偏差分类：{selected}",
-                    project_subset_by_value(cross_projects, "进度偏差分类", selected),
+    with detail_col:
+        avg_col, deviation_col, distribution_col = st.columns([2, 2, 4])
+        with avg_col:
+            with st.container(border=True, key="delivery-top-kpi-cross-avg"):
+                render_project_kpi(
+                    "平均进度",
+                    pct(cross["avg_progress"]),
+                    cross_projects,
+                    key="drilldown_big_cross_avg_progress",
+                    context="跨年交付 · 平均进度",
                 )
-    g1, g2 = st.columns(2)
-    with g1:
-        with st.container(border=True):
-            selected = render_bar_chart(
-                "预计交付年",
-                cross["delivery_year"],
-                "年份",
-                "数量",
-                key="cross_delivery_year",
-            )
-            if selected is not None:
-                year = pd.to_numeric(selected.rstrip("年"), errors="coerce")
-                dates = parse_excel_date_series(cross_projects["预计交付日期"])
-                detail = cross_projects.loc[dates.dt.year.eq(year)].copy()
-                show_project_detail(f"跨年交付 · 预计交付年：{selected}", detail)
-    with g2:
-        with st.container(border=True):
-            project_ranking = cross["project_deviation_ranking"]
-            selected_cell = render_selectable_metric_table(
-                "项目进度偏差排名",
-                project_ranking,
-                key="cross_project_deviation_ranking",
-                clickable_columns=set(project_ranking.columns),
-            )
-            if selected_cell is not None and 0 <= selected_cell[0] < len(project_ranking):
-                source_index = project_ranking.index[selected_cell[0]]
-                detail = cross_projects.loc[cross_projects.index == source_index].copy()
-                project_name = str(project_ranking.iloc[selected_cell[0]]["A-项目名称"])
-                show_project_detail(f"跨年交付 · 项目进度偏差：{project_name}", detail)
+        with deviation_col:
+            with st.container(border=True, key="delivery-top-kpi-cross-deviation"):
+                render_project_kpi(
+                    "平均进度偏差",
+                    pct(cross["avg_deviation"], 1),
+                    cross_projects,
+                    key="drilldown_big_cross_avg_deviation",
+                    caption="实际完成进度-时间进度",
+                    context="跨年交付 · 平均进度偏差",
+                )
+        with distribution_col:
+            with st.container(border=True):
+                selected = render_count_chart(
+                    "偏差类型分布",
+                    cross["deviation_type"],
+                    "进度偏差分类",
+                    key="cross_deviation_type",
+                )
+                if selected is not None:
+                    show_project_detail(
+                        f"跨年交付 · 进度偏差分类：{selected}",
+                        project_subset_by_value(cross_projects, "进度偏差分类", selected),
+                    )
+        year_col, ranking_col = st.columns([2, 6])
+        with year_col:
+            with st.container(border=True):
+                selected = render_bar_chart(
+                    "预计交付年",
+                    cross["delivery_year"],
+                    "年份",
+                    "数量",
+                    key="cross_delivery_year",
+                )
+                if selected is not None:
+                    year = pd.to_numeric(selected.rstrip("年"), errors="coerce")
+                    dates = parse_excel_date_series(cross_projects["预计交付日期"])
+                    detail = cross_projects.loc[dates.dt.year.eq(year)].copy()
+                    show_project_detail(f"跨年交付 · 预计交付年：{selected}", detail)
+        with ranking_col:
+            with st.container(border=True):
+                project_ranking = cross["project_deviation_ranking"]
+                selected_cell = render_selectable_metric_table(
+                    "项目进度偏差排名",
+                    project_ranking,
+                    key="cross_project_deviation_ranking",
+                    clickable_columns=set(project_ranking.columns),
+                )
+                if selected_cell is not None and 0 <= selected_cell[0] < len(project_ranking):
+                    source_index = project_ranking.index[selected_cell[0]]
+                    detail = cross_projects.loc[cross_projects.index == source_index].copy()
+                    project_name = str(project_ranking.iloc[selected_cell[0]]["A-项目名称"])
+                    show_project_detail(f"跨年交付 · 项目进度偏差：{project_name}", detail)
 
 # —— 已验收
-label_col, body_col = st.columns([1, 9])
-with label_col:
-    render_row_label("已验收")
-with body_col:
-    accepted = delivery["accepted"]
-    b1, b2, b3 = st.columns([2, 2, 4])
-    with b1:
-        with st.container(border=True):
-            render_project_kpi(
-                "已交付项目个数",
-                f"{accepted['count']}",
-                accepted_projects,
-                key="drilldown_big_accepted_project_count",
-                context="已验收项目",
+accepted = delivery["accepted"]
+status_col, progress_col, deviation_col = st.columns([2, 4, 6])
+with status_col:
+    render_delivery_band(["已", "验收"], "accepted")
+with progress_col:
+    with st.container(border=True, key="delivery-top-kpi-accepted-count"):
+        render_project_kpi(
+            "已交付项目个数", f"{accepted['count']}", accepted_projects,
+            key="drilldown_big_accepted_project_count", context="已验收项目",
+        )
+    with st.container(border=True, key="delivery-top-kpi-accepted-rate"):
+        render_project_kpi(
+            f"{ref_year_text}交付率", pct(accepted["delivery_rate"]),
+            due_current_year_projects, key="drilldown_big_current_delivery_rate",
+            caption=accepted["delivery_rate_detail"],
+            context=f"{ref_year_text}交付率 · 当年应交付项目",
+        )
+with deviation_col:
+    with st.container(border=True):
+        selected = render_count_chart(
+            "偏差类型分布", accepted["deviation_type"], "进度偏差分类",
+            key="accepted_deviation_type",
+        )
+        if selected is not None:
+            show_project_detail(
+                f"已验收 · 进度偏差分类：{selected}",
+                project_subset_by_value(accepted_projects, "进度偏差分类", selected),
             )
-    with b2:
-        with st.container(border=True):
-            render_project_kpi(
-                f"{ref_year_text}交付率",
-                pct(accepted["delivery_rate"]),
-                due_current_year_projects,
-                key="drilldown_big_current_delivery_rate",
-                caption=accepted["delivery_rate_detail"],
-                context=f"{ref_year_text}交付率 · 当年应交付项目",
-            )
-    with b3:
-        with st.container(border=True):
-            selected = render_count_chart(
-                "偏差类型分布",
-                accepted["deviation_type"],
-                "进度偏差分类",
-                key="accepted_deviation_type",
-            )
-            if selected is not None:
-                show_project_detail(
-                    f"已验收 · 进度偏差分类：{selected}",
-                    project_subset_by_value(accepted_projects, "进度偏差分类", selected),
-                )
     with st.container(border=True):
         delivered_ranking = accepted["delivered_unaccepted_ranking"]
         selected = render_bar_chart(
-            "业务部已交付未验收项目个数排名",
-            delivered_ranking,
-            "业务单元",
-            "项目个数",
-            key="delivered_unaccepted_unit_ranking",
+            "业务部已交付未验收项目个数排名", delivered_ranking,
+            "业务单元", "项目个数", key="delivered_unaccepted_unit_ranking",
         )
         if selected is not None:
             show_project_detail(
@@ -798,6 +778,14 @@ with st.container(border=True):
                 selected_scope,
             )
 
+stage_header, company_header, unit_header = st.columns([2, 4, 6])
+with stage_header:
+    render_group_banner("项目阶段", grid_header=True)
+with company_header:
+    render_group_banner("公司整体未完成项目个数", grid_header=True)
+with unit_header:
+    render_group_banner("业务部门未完成质控/归档项目个数", grid_header=True)
+
 for alert_index, alert in enumerate(alerts):
     stage_name, stage_note = alert["stage"].split("（")
     stage_scopes = alert_scopes[stage_name]
@@ -805,13 +793,13 @@ for alert_index, alert in enumerate(alerts):
     unarchived_stage_projects = stage_scopes["unarchived"]
     unqc_stage_projects = stage_scopes["unqc"]
     region_focus_projects = stage_scopes["region_focus"]
-    label_col, body_col = st.columns([1, 9])
+    label_col, body_col = st.columns([2, 10])
     with label_col:
         render_row_label(stage_name, f"（{stage_note}")
     with body_col:
         b1, b2, b3 = st.columns([2, 2, 6])
         with b1:
-            with st.container(border=True):
+            with st.container(border=True, key=f"alert-grid-card-project-{alert_index}"):
                 render_project_kpi(
                     "项目个数",
                     f"{alert['project_count']}",
@@ -820,7 +808,7 @@ for alert_index, alert in enumerate(alerts):
                     context=f"{stage_name} · 项目个数",
                 )
         with b2:
-            with st.container(border=True):
+            with st.container(border=True, key=f"alert-grid-card-status-{alert_index}"):
                 if alert["unqc_count"] is not None:
                     render_project_kpi(
                         "未完成质控个数",
@@ -839,7 +827,7 @@ for alert_index, alert in enumerate(alerts):
                     context=f"{stage_name} · 未完成归档",
                 )
         with b3:
-            with st.container(border=True):
+            with st.container(border=True, key=f"alert-grid-card-unit-{alert_index}"):
                 region_table = alert["region_table"]
                 selected_cell = render_selectable_metric_table(
                     "业务部门未完成质控/归档项目个数",

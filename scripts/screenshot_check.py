@@ -161,7 +161,10 @@ with sync_playwright() as p:
     dialog.locator('button[aria-label="Close"]').click()
     dialog.wait_for(state="hidden", timeout=10000)
 
-    unit_ranking_chart = page.locator('[data-testid="stPlotlyChart"]').nth(3)
+    unit_ranking_chart = page.locator(
+        '[class*="st-key-current_unit_deviation_ranking_selection_"] '
+        '[data-testid="stPlotlyChart"]'
+    ).first
     unit_ranking_bar = unit_ranking_chart.locator('.point path').first
     unit_ranking_bar.scroll_into_view_if_needed()
     unit_ranking_bar.click(force=True)

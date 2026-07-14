@@ -19,11 +19,12 @@ def inject_css() -> None:
     st.markdown(
         """
         <style>
-        .block-container { padding-top: 1.2rem; max-width: 1500px; }
+        .block-container { padding-top: 1.2rem; max-width: 1800px; }
         [data-testid="stVerticalBlockBorderWrapper"] {
             background: #FFFFFF;
             border-radius: 12px;
-            border: 1px solid #EBEDF0;
+            border: 1px solid #EBEDF0 !important;
+            box-shadow: none !important;
         }
         .section-banner {
             background: #3370FF; color: #FFFFFF;
@@ -40,11 +41,92 @@ def inject_css() -> None:
         .row-label {
             background: #8FB3FF; color: #FFFFFF;
             font-size: 1.15rem; font-weight: 700;
-            padding: 1.4rem 0.6rem; border-radius: 10px;
-            text-align: center; letter-spacing: 0.2em;
+            min-height: 390px; padding: 1.4rem 0.6rem; border-radius: 10px;
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; text-align: center; letter-spacing: 0.2em;
             margin: 0.2rem 0;
         }
+        .group-banner.grid-header {
+            min-height: 68px;
+            display: flex;
+            align-items: center;
+            margin-top: 0;
+            margin-bottom: 0.15rem;
+        }
         .row-label small { font-size: 0.8rem; letter-spacing: 0; display: block; }
+        .delivery-band {
+            background: #8FB3FF; color: #FFFFFF;
+            border-radius: 10px;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            gap: 0.8rem; text-align: center;
+            font-size: 1.35rem; font-weight: 800;
+            line-height: 1.35;
+        }
+        .delivery-band-unaccepted { min-height: 1390px; }
+        .delivery-band-accepted { min-height: 684px; }
+        .delivery-band span { display: block; }
+        div[class*="st-key-delivery-top-kpi-"][data-testid="stVerticalBlock"] {
+            min-height: 340px;
+        }
+        div[class*="st-key-delivery-tall-card-"][data-testid="stVerticalBlock"] {
+            min-height: 684px;
+        }
+        div[class*="st-key-delivery-top-kpi-"][data-testid="stVerticalBlock"]
+        > [data-testid="stLayoutWrapper"],
+        div[class*="st-key-delivery-tall-card-"][data-testid="stVerticalBlock"]
+        > [data-testid="stLayoutWrapper"] {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        div[class*="st-key-delivery-top-kpi-"] div[class*="st-key-drilldown_big_"],
+        div[class*="st-key-delivery-tall-card-"] div[class*="st-key-drilldown_big_"] {
+            flex: 1;
+        }
+        div[class*="st-key-delivery-top-kpi-"] div[class*="st-key-drilldown_big_"][class*="_button"],
+        div[class*="st-key-delivery-tall-card-"] div[class*="st-key-drilldown_big_"][class*="_button"] {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+        div[class*="st-key-alert-grid-card-"][data-testid="stVerticalBlock"] {
+            min-height: 390px;
+        }
+        div[class*="st-key-alert-grid-card-"][data-testid="stVerticalBlock"]
+        > [data-testid="stLayoutWrapper"] {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        div[class*="st-key-alert-grid-card-"] div[class*="st-key-drilldown_big_"] {
+            flex: 1;
+        }
+        div[class*="st-key-alert-grid-card-"]
+        div[class*="st-key-drilldown_big_"][class*="_button"] {
+            flex: 1;
+            display: flex;
+            align-items: center;
+        }
+        div[class*="st-key-delivery-tall-card-"] [data-testid="stVerticalBlockBorderWrapper"] {
+            min-height: 684px;
+            display: flex;
+            align-items: stretch;
+        }
+        div[class*="st-key-delivery-tall-card-"] [data-testid="stVerticalBlock"] {
+            justify-content: space-between;
+        }
+        @media (max-width: 900px) {
+            .row-label,
+            .delivery-band-unaccepted,
+            .delivery-band-accepted { min-height: 110px; }
+            div[class*="st-key-alert-grid-card-"][data-testid="stVerticalBlock"] {
+                min-height: 0;
+            }
+            div[class*="st-key-delivery-tall-card-"] [data-testid="stVerticalBlockBorderWrapper"] {
+                min-height: 0;
+            }
+        }
         .big-card { padding: 0.9rem 1.1rem 1.1rem 1.1rem; }
         .big-card .t { font-size: 0.88rem; font-weight: 600; color: #1F2329; }
         .big-card .v { font-size: 2.3rem; font-weight: 800; color: #3370FF;
@@ -170,13 +252,26 @@ def render_section_banner(text: str) -> None:
     st.markdown(f'<div class="section-banner">{text}</div>', unsafe_allow_html=True)
 
 
-def render_group_banner(text: str) -> None:
-    st.markdown(f'<div class="group-banner">{text}</div>', unsafe_allow_html=True)
+def render_group_banner(text: str, *, grid_header: bool = False) -> None:
+    extra_class = " grid-header" if grid_header else ""
+    st.markdown(
+        f'<div class="group-banner{extra_class}">{escape(text)}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_row_label(text: str, note: str = "") -> None:
     note_html = f"<small>{note}</small>" if note else ""
     st.markdown(f'<div class="row-label">{text}{note_html}</div>', unsafe_allow_html=True)
+
+
+def render_delivery_band(lines: list[str], variant: str) -> None:
+    """Render the dashboard's in-content delivery-status band."""
+    safe_lines = "".join(f"<span>{escape(line)}</span>" for line in lines)
+    st.markdown(
+        f'<div class="delivery-band delivery-band-{escape(variant)}">{safe_lines}</div>',
+        unsafe_allow_html=True,
+    )
 
 
 def render_big_number(title: str, value: str, caption: str = "") -> None:
