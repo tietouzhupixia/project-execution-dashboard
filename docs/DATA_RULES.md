@@ -257,7 +257,9 @@ Columns: `人员`, `净执行合同额`, `所属区域/业务单元`, `数据说
 
 - Person found in `人员关系表` and has net amount > 0: `人员关系表匹配/当前有执行数据`
 - Person found in `人员关系表` and net amount = 0: `人员关系表匹配/当前无执行数据`
-- Person appears in execution data but not in `人员关系表`: `执行名单补充-临时归属待确认`
+- Person appears in execution data but not in an uploaded `人员关系表`: department is
+  `人员关系缺失/待确认`, note is `人员关系表缺失-未进行项目区域推断`; never infer a
+  department from project regions when a relation table exists.
 - No `人员关系表` uploaded at all: `无人员关系表-区域按项目推断`
 
 ## 16. 26年人均净合同额（人员3口径）

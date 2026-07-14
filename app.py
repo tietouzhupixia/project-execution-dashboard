@@ -179,6 +179,7 @@ def render_download_bar(
     formula_data: bytes,
     *,
     complete_personnel3: bool,
+    disabled: bool = False,
 ) -> None:
     with download_slot:
         info_col, dl_col1, dl_col2 = st.columns([2, 1, 1])
@@ -214,6 +215,7 @@ def render_download_bar(
                 mime=mime_xlsx,
                 use_container_width=True,
                 help=value_help,
+                disabled=disabled,
             )
         with dl_col2:
             st.download_button(
@@ -223,6 +225,7 @@ def render_download_bar(
                 mime=mime_xlsx,
                 use_container_width=True,
                 help=formula_help,
+                disabled=disabled,
             )
 if is_filtered:
     st.info("当前为筛选视图：以下所有图表、表格与导出文件均按筛选后的项目计算。")
@@ -1078,11 +1081,21 @@ else:
         st.error(f"人员3口径计算失败：{type(exc).__name__}: {exc}")
         render_download_bar(export_payload, formula_payload, complete_personnel3=False)
     else:
+        personnel3_people_count = int(
+            personnel3_outputs.company.iloc[0]["有效执行人数（人员3）"]
+        )
+        personnel3_export_ready = personnel3_people_count == 22
         render_download_bar(
             personnel3_value_payload,
             personnel3_formula_payload,
             complete_personnel3=True,
+            disabled=not personnel3_export_ready,
         )
+        if not personnel3_export_ready:
+            st.error(
+                f"人员关系表校验未通过：人员3去重人数为 {personnel3_people_count}，应为 22。"
+                "当前页面结果仅供排查，顶部正式下载按钮已禁用；请补全 input_人员关系表后重新上传。"
+            )
         st.caption("本章节按三张 input 表的全量口径计算，不受页面顶部进度筛选影响。")
         current_match_counts = "；".join(
             f"{state} {int(count)}"

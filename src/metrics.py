@@ -287,7 +287,10 @@ def build_efficiency(raw: pd.DataFrame, relation: pd.DataFrame | None, warnings:
 
     relation_area = build_person_area_mapping(relation)
     project_area = build_person_area_from_projects(raw)
-    person_area = {**project_area, **relation_area}
+    has_relation = relation is not None and not relation.empty
+    # 有人员关系表时，关系表就是人员部门的唯一权威来源。缺失人员不得再按项目区域
+    # 回退，否则删掉一名技术服务部人员就可能把其金额错误归入东北/华东等业务部。
+    person_area = relation_area if has_relation else project_area
     rows = []
     for _, project in raw.iterrows():
         income = number_or_zero(project.get("收入"))
@@ -322,8 +325,23 @@ def build_efficiency(raw: pd.DataFrame, relation: pd.DataFrame | None, warnings:
             .merge(person, on="人员", how="left")
             .fillna({"净执行合同额": 0, "含虚拟比例": False})
         )
-    person["所属区域/业务单元"] = person["人员"].map(person_area).fillna("未匹配")
-    person["数据说明"] = build_data_notes(person, relation_area)
+    missing_relation_people = (
+        sorted(set(person["人员"].astype(str)) - set(relation_area))
+        if has_relation
+        else []
+    )
+    if missing_relation_people:
+        preview = "、".join(missing_relation_people[:8])
+        suffix = "等" if len(missing_relation_people) > 8 else ""
+        warnings.append(
+            f"人员关系表缺少 {len(missing_relation_people)} 名执行人员：{preview}{suffix}；"
+            "已统一归入‘人员关系缺失/待确认’，未按项目区域推断。"
+        )
+    missing_label = "人员关系缺失/待确认" if has_relation else "未匹配"
+    person["所属区域/业务单元"] = person["人员"].map(person_area).fillna(missing_label)
+    person["数据说明"] = build_data_notes(
+        person, relation_area, has_relation=has_relation
+    )
 
     unit = (
         person.groupby("所属区域/业务单元", as_index=False)
@@ -559,14 +577,21 @@ def build_stage_alerts(raw: pd.DataFrame) -> list[dict]:
     return alerts
 
 
-def build_data_notes(person: pd.DataFrame, relation_area: dict[str, str]) -> pd.Series:
+def build_data_notes(
+    person: pd.DataFrame,
+    relation_area: dict[str, str],
+    *,
+    has_relation: bool | None = None,
+) -> pd.Series:
     """人效基础数据 数据说明 column (DATA_RULES §12)."""
-    if not relation_area:
+    if has_relation is None:
+        has_relation = bool(relation_area)
+    if not has_relation:
         return pd.Series("无人员关系表-区域按项目推断", index=person.index)
 
     def note(row: pd.Series) -> str:
         if str(row["人员"]) not in relation_area:
-            return "执行名单补充-临时归属待确认"
+            return "人员关系表缺失-未进行项目区域推断"
         if row["净执行合同额"] > 0:
             return "人员关系表匹配/当前有执行数据"
         return "人员关系表匹配/当前无执行数据"

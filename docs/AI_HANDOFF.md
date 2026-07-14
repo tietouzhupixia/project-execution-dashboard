@@ -355,6 +355,15 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
   `4.66e-10`, and zero Excel error cells. UI download labels now explicitly distinguish value and
   complete-formula workbooks.
 
+## 2026-07-14 Personnel Relation Completeness Guard
+
+- When a personnel relation table exists, an execution person missing from it is assigned to
+  `人员关系缺失/待确认`; never infer that person's department from project regions. Project-region
+  inference remains only for the legacy path where no relation table was uploaded at all.
+- The formal personnel-3 headcount is fixed at 22. If the deduplicated count differs, the page may
+  show diagnostic results but must disable both complete-workbook download buttons until the
+  `input_人员关系表` is corrected.
+
 ## Verification Done
 
 - `python -m compileall -q app.py src tests` passed.

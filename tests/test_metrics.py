@@ -242,11 +242,35 @@ def test_efficiency_data_note_with_relation():
             {"人员": "王五", "所属区域": "华北业务部"},
         ]
     )
-    person = build_efficiency(raw, relation=relation, warnings=[])["person"].set_index("人员")
+    warnings = []
+    person = build_efficiency(raw, relation=relation, warnings=warnings)["person"].set_index("人员")
 
     assert person.loc["张三", "数据说明"] == "人员关系表匹配/当前有执行数据"
     assert person.loc["王五", "数据说明"] == "人员关系表匹配/当前无执行数据"
-    assert person.loc["李四", "数据说明"] == "执行名单补充-临时归属待确认"
+    assert person.loc["李四", "所属区域/业务单元"] == "人员关系缺失/待确认"
+    assert person.loc["李四", "数据说明"] == "人员关系表缺失-未进行项目区域推断"
+    assert any("人员关系表缺少 1 名执行人员" in warning for warning in warnings)
+
+
+def test_efficiency_never_reassigns_missing_relation_person_to_project_area():
+    raw = normalize_raw_data(
+        pd.DataFrame(
+            [
+                {
+                    "A-执行人员": "技术人员",
+                    "收入": 100,
+                    "B-服务采购比例": 0,
+                    "A-项目经理区域": "东北业务部",
+                }
+            ]
+        ),
+        [],
+    )
+    relation = pd.DataFrame([{"人员": "其他人员", "所属区域": "技术服务部"}])
+
+    person = build_efficiency(raw, relation=relation, warnings=[])["person"].set_index("人员")
+
+    assert person.loc["技术人员", "所属区域/业务单元"] == "人员关系缺失/待确认"
 
 
 def test_efficiency_data_note_without_relation():
