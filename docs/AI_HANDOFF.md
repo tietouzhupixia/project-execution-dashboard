@@ -342,6 +342,19 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
   `4.66e-10`, person/project maximum difference 0, and no Excel error cells. Current suite:
   `45 passed`; personnel-3 browser regression passes with both download labels present.
 
+## 2026-07-14 Personnel-3 Complete Formula Chain
+
+- Formula export still contains all 13 ordered sheets (5 output, 5 calculation, 3 input),
+  but the three input sheets are now the only raw-data layer.
+- Outsource source columns, project source columns, personnel-3 list, and every allocation
+  column now use simple row/lookup formulas. Matching status/project remain explicit generated
+  or human-confirmed decisions because fuzzy matching is not represented as a fragile Excel formula.
+- Output exceptions remain a generated text audit list; all meaningful numeric calculations and
+  checks are formula-backed. Formula headers/cells retain orange/yellow audit styling.
+- Real 0713 Excel recalculation: company/person/project max difference 0, department max difference
+  `4.66e-10`, and zero Excel error cells. UI download labels now explicitly distinguish value and
+  complete-formula workbooks.
+
 ## Verification Done
 
 - `python -m compileall -q app.py src tests` passed.

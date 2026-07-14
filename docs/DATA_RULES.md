@@ -335,6 +335,20 @@ The formula workbook marks formula headers orange (`#C65911`) and formula cells 
 yellow (`#FFF2CC`). Project IDs in project and allocation calculation sheets are written
 as normalized text, and allocation uses `SUMIF` over those text keys.
 
+公式核算版必须把三张 `input_` 作为唯一原始数据层。可直接追溯的字段不得再次写死：
+
+- 外委匹配表的序号、名称、金额引用 `input_外委更新金额`；匹配状态和指定项目保留为
+  系统初判/人工确认结果，采信判断与金额使用公式。
+- 项目净额明细的项目字段、金额、比例、日期和期初进度引用 `input_实施进度表`，后续
+  净额、年度进度与纳入口径金额均使用分步公式。
+- 人员3名单引用 `input_人员关系表` 的首次有效人员行；人员分摊明细的项目、人员、比例、
+  部门、范围判断和金额全部沿输入/计算表使用公式。
+- 公司、部门、人员、汇总和核验表继续引用 calculation 层。异常表是规则引擎生成的文本
+  审计清单，不为制造公式而使用无意义的 `="固定文字"`。
+
+导出工作簿由应用按本次 input 行数生成，公式范围使用实际行边界而非整列引用；以后新增、
+删除项目或人员时应重新上传三张 input 并导出，不能只在旧成果文件末尾粘贴新行。
+
 ## 17. KPI and Summary-Cell Drill-down
 
 可明确对应项目范围的大数字均直接打开项目明细，显示值和下钻范围必须共用同一口径：

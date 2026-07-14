@@ -1052,10 +1052,13 @@ else:
         st.caption(f"当前确认结果：{current_match_counts}")
         export_info, export_value, export_formula = st.columns([2, 1, 1])
         with export_info:
-            st.caption("下载内容使用当前匹配确认结果，并保留完整 input / calculation / output 审计链。")
+            st.caption(
+                "以后仅需上传 input_实施进度表、input_外委更新金额、input_人员关系表；"
+                "完整核算工作簿会导出全部 calculation_ / output_ 表及可追溯公式。"
+            )
         with export_value:
             st.download_button(
-                "下载人员3结果",
+                "下载人员3结果（数值版）",
                 data=personnel3_value_payload,
                 file_name=f"26年人均净合同额_人员3口径_{today}.xlsx",
                 mime=mime_xlsx,
@@ -1064,12 +1067,15 @@ else:
             )
         with export_formula:
             st.download_button(
-                "下载人员3核算版",
+                "下载完整核算工作簿（含公式）",
                 data=personnel3_formula_payload,
                 file_name=f"26年人均净合同额_人员3口径_核算版_{today}.xlsx",
                 mime=mime_xlsx,
                 use_container_width=True,
-                help="公式版：橙色表头和浅黄色单元格为活公式，可沿三张 input 表复核。",
+                help=(
+                    "公式版：包含全部 5 张 output_、5 张 calculation_ 和 3 张 input_；"
+                    "橙色表头与浅黄色单元格为活公式。"
+                ),
             )
         included_projects = personnel3_project_detail.loc[
             personnel3_project_detail["是否纳入口径"].eq("是")

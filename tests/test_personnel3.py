@@ -386,7 +386,9 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
 
     project = workbook["calculation_项目净额明细"]
     allocation = workbook["calculation_人员分摊明细"]
+    personnel3 = workbook["calculation_人员3名单"]
     company = workbook["output_公司层面"]
+    person = workbook["output_人员层面"]
     checks = workbook["calculation_核验"]
 
     project_headers = {cell.value: cell.column for cell in project[1]}
@@ -395,8 +397,11 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
     allocation_amount_column = allocation_headers["项目26年净执行合同额"]
 
     assert workbook.sheetnames == VALUE_SHEETS
-    assert project["A2"].value == "1001"
-    assert allocation["A2"].value == "1001"
+    assert project["A2"].value.startswith("=IF('input_实施进度表'")
+    assert '&""' in project["A2"].value
+    assert allocation["A2"].value.startswith("='calculation_项目净额明细'")
+    assert personnel3["A2"].value.startswith("='input_人员关系表'")
+    assert person["A2"].value.startswith("='calculation_人员3名单'")
     assert project.cell(2, base_column).value.startswith("=IF(")
     assert "SUMIF('calculation_项目净额明细'" in allocation.cell(2, allocation_amount_column).value
     assert company["B2"].value.startswith("=SUM(")
@@ -404,3 +409,16 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
     assert project.cell(1, base_column).fill.fgColor.rgb.endswith(ORANGE)
     assert project.cell(2, base_column).fill.fgColor.rgb.endswith(YELLOW)
     assert workbook.calculation.fullCalcOnLoad is True
+
+    formula_required = [
+        sheet for sheet in VALUE_SHEETS
+        if sheet.startswith(("calculation_", "output_")) and sheet != "output_异常检查"
+    ]
+    for sheet in formula_required:
+        formulas = [
+            cell.value
+            for row in workbook[sheet].iter_rows(min_row=2)
+            for cell in row
+            if isinstance(cell.value, str) and cell.value.startswith("=")
+        ]
+        assert formulas, f"{sheet} should contain live formulas"
