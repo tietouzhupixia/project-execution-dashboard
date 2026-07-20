@@ -24,6 +24,7 @@ IMPLEMENTATION_REQUIRED = [
 ]
 OUTSOURCE_REQUIRED = ["外委项目名称", "服务采购金额（元）"]
 PEOPLE_REQUIRED = ["人员 3", "所属区域 3"]
+CONFIRMATION_COLUMNS = ["外委序号", "匹配状态", "对应实施项目编号"]
 
 
 @dataclass
@@ -82,9 +83,19 @@ def load_personnel3_inputs(file: str | BinaryIO) -> Personnel3Inputs:
     return result
 
 
+def get_initial_confirmations(inputs: Personnel3Inputs) -> pd.DataFrame:
+    """Return confirmations while tolerating objects created by an older app cache."""
+    confirmations = getattr(inputs, "initial_confirmations", None)
+    if not isinstance(confirmations, pd.DataFrame):
+        return pd.DataFrame(columns=CONFIRMATION_COLUMNS)
+    if not set(CONFIRMATION_COLUMNS).issubset(confirmations.columns):
+        return pd.DataFrame(columns=CONFIRMATION_COLUMNS)
+    return confirmations[CONFIRMATION_COLUMNS].copy()
+
+
 def _read_initial_confirmations(xls: pd.ExcelFile, outsource: pd.DataFrame) -> pd.DataFrame:
     """Reuse audited decisions when a generated result workbook is uploaded."""
-    columns = ["外委序号", "匹配状态", "对应实施项目编号"]
+    columns = CONFIRMATION_COLUMNS
     if "audit_外委确认" in xls.sheet_names:
         audit = pd.read_excel(xls, sheet_name="audit_外委确认")
         if "确认状态" in audit.columns and "匹配状态" not in audit.columns:

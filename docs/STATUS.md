@@ -1,6 +1,6 @@
 # Status
 
-Last updated by AI: 2026-07-14.
+Last updated by AI: 2026-07-20.
 
 ## 当前状态速览（2026-07-14）
 
@@ -221,6 +221,11 @@ Last updated by AI: 2026-07-14.
   - 全量测试 `46 passed`。
 
 ## In Progress
+
+- 2026-07-20：修复 Streamlit 热更新后旧 `Personnel3Inputs` 缓存对象缺少
+  `initial_confirmations` 导致的 AttributeError；加入缓存 schema 版本和旧对象兼容读取。
+  原始 `实施进度表0717(1).xlsx` 真实上传通过：匹配 `29/9/23`、59 个项目、22 人，
+  页面无错误；全量测试 `49 passed`。
 
 - 需用 2-3 份不同来源的真实底表进一步验证（目前主要用样例 + 用户实际文件各一份）。
 

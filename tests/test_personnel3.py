@@ -10,7 +10,12 @@ from src.personnel3_export import (
     build_personnel3_formula_workbook,
     build_personnel3_value_workbook,
 )
-from src.personnel3_loader import Personnel3Inputs, coerce_number_series, load_personnel3_inputs
+from src.personnel3_loader import (
+    Personnel3Inputs,
+    coerce_number_series,
+    get_initial_confirmations,
+    load_personnel3_inputs,
+)
 from src.personnel3_metrics import (
     MATCHED,
     NEEDS_CONFIRMATION,
@@ -113,6 +118,16 @@ def test_loads_audited_outsource_confirmations_from_generated_workbook():
     assert loaded.initial_confirmations.to_dict("records") == [
         {"外委序号": 1, "匹配状态": MATCHED, "对应实施项目编号": "P1"}
     ]
+
+
+def test_initial_confirmations_tolerates_legacy_cached_object():
+    class LegacyInputs:
+        pass
+
+    confirmations = get_initial_confirmations(LegacyInputs())
+
+    assert confirmations.empty
+    assert list(confirmations.columns) == ["外委序号", "匹配状态", "对应实施项目编号"]
 
 
 def test_missing_new_input_sheets_returns_business_errors():

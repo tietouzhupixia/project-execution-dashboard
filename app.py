@@ -43,7 +43,7 @@ from src.metrics import (
     projects_of_unit,
     stage_alert_project_subsets,
 )
-from src.personnel3_loader import load_personnel3_inputs
+from src.personnel3_loader import get_initial_confirmations, load_personnel3_inputs
 from src.personnel3_export import (
     build_personnel3_formula_workbook,
     build_personnel3_value_workbook,
@@ -85,8 +85,12 @@ def load_workbook_cached(file_bytes: bytes):
     return load_workbook(io.BytesIO(file_bytes))
 
 
+PERSONNEL3_INPUTS_CACHE_SCHEMA = 2
+
+
 @st.cache_data(show_spinner="正在校验人员3口径输入...")
-def load_personnel3_inputs_cached(file_bytes: bytes):
+def load_personnel3_inputs_cached(file_bytes: bytes, schema_version: int):
+    del schema_version  # Part of the cache key; bump it when Personnel3Inputs changes.
     return load_personnel3_inputs(io.BytesIO(file_bytes))
 
 
@@ -101,7 +105,10 @@ except Exception as exc:  # noqa: BLE001 - 面向业务用户的兜底提示
     st.stop()
 
 try:
-    personnel3_inputs = load_personnel3_inputs_cached(uploaded_bytes)
+    personnel3_inputs = load_personnel3_inputs_cached(
+        uploaded_bytes,
+        PERSONNEL3_INPUTS_CACHE_SCHEMA,
+    )
     personnel3_parse_error = None
 except Exception as exc:  # noqa: BLE001 - 新口径失败不阻断原四章节
     personnel3_inputs = None
@@ -985,7 +992,7 @@ else:
         initial_matches = match_outsource_projects(
             personnel3_inputs.implementation,
             personnel3_inputs.outsource,
-            personnel3_inputs.initial_confirmations,
+            get_initial_confirmations(personnel3_inputs),
         )
         initial_project_detail = build_project_net_detail(
             personnel3_inputs.implementation,

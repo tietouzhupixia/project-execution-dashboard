@@ -382,6 +382,17 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
 
 ## Verification Done
 
+### 2026-07-20 Personnel-3 Cache Compatibility
+
+- `Personnel3Inputs` gained `initial_confirmations`; a Streamlit hot-reload session could return
+  an older cached instance without that attribute and fail the fifth section.
+- `app.py` now includes `PERSONNEL3_INPUTS_CACHE_SCHEMA` in the cache key. Increment it whenever
+  the dataclass shape or personnel-3 parsing contract changes.
+- Read confirmations through `get_initial_confirmations`; an old cached object or malformed table
+  becomes an empty canonical confirmation table instead of raising `AttributeError`.
+- Raw `实施进度表0717(1).xlsx` upload verified: matching `29/9/23`, 59 projects, 22 people,
+  no page errors. Regression entry: `scripts/personnel3_raw_input_ui_check.py`.
+
 - `python -m compileall -q app.py src tests` passed.
 - Direct manual execution of the two starter test functions passed.
 - `.venv` was created.
