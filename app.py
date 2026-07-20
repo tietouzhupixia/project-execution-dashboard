@@ -985,6 +985,7 @@ else:
         initial_matches = match_outsource_projects(
             personnel3_inputs.implementation,
             personnel3_inputs.outsource,
+            personnel3_inputs.initial_confirmations,
         )
         initial_project_detail = build_project_net_detail(
             personnel3_inputs.implementation,
@@ -1187,7 +1188,7 @@ else:
         with person_col:
             with st.container(border=True):
                 selected_person = render_horizontal_ranking_chart(
-                    "人员326年净执行合同额排名",
+                    "已填执行比例的人员3分摊金额排名",
                     personnel3_outputs.person,
                     "人员3",
                     "26年净执行合同额",

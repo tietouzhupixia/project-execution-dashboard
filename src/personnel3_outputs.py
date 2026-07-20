@@ -33,7 +33,9 @@ def personnel3_department_people(personnel3_list: pd.DataFrame, department: str)
 
 def personnel3_person_allocations(allocation: pd.DataFrame, person: str) -> pd.DataFrame:
     return allocation.loc[
-        allocation["执行人员"].eq(person) & allocation["是否人员3范围"].eq("是")
+        allocation["执行人员"].eq(person)
+        & allocation["是否人员3范围"].eq("是")
+        & _numeric(allocation["项目26年净执行合同额"]).ne(0)
     ].copy()
 
 
@@ -208,6 +210,7 @@ def build_three_level_outputs(
         person_name = member["人员3"]
         rows = allocation.loc[
             allocation["执行人员"].eq(person_name) & allocation["是否人员3范围"].eq("是")
+            & _numeric(allocation["项目26年净执行合同额"]).ne(0)
         ]
         amount = _numeric(rows["分摊26年净执行合同额"]).sum()
         participation_count = len(rows)
@@ -268,7 +271,8 @@ def build_personnel3_exceptions(
                     )
                 )
 
-        if named_people and not filled_ratios:
+        legacy_execution_people = _clean_text(project.get("A-执行人员"))
+        if (named_people and not filled_ratios) or (legacy_execution_people and not named_people):
             rows.append(
                 _exception(
                     project_id,
@@ -299,6 +303,15 @@ def build_personnel3_exceptions(
                     project_name,
                     "不纳入口径项目",
                     "项目经理区域包含绿链或数字化市场团队，不计入公司、部门、个人金额及项目数。",
+                )
+            )
+        if _number(detail.get("项目净执行合同额")) < 0:
+            rows.append(
+                _exception(
+                    project_id,
+                    project_name,
+                    "项目净额为负",
+                    "最终采信服务采购金额大于净额取数基数；当前按规则保留负数。",
                 )
             )
 
@@ -346,8 +359,19 @@ def build_personnel3_checks(
     accepted_outsource = _numeric(
         outsource_matches.loc[outsource_matches["匹配状态"].eq(MATCHED), "纳入采信金额"]
     ).sum()
-    allocated = _numeric(allocation.get("分摊26年净执行合同额", pd.Series(dtype=float))).sum()
-    coverage = allocated / company_amount if company_amount else 0.0
+    allocation_amount = _numeric(
+        allocation.get("分摊26年净执行合同额", pd.Series(dtype=float))
+    )
+    included_allocation = _numeric(
+        allocation.get("项目26年净执行合同额", pd.Series(dtype=float))
+    ).ne(0)
+    personnel3_scope = allocation.get(
+        "是否人员3范围", pd.Series(index=allocation.index, dtype="object")
+    ).eq("是")
+    all_allocated = allocation_amount.loc[included_allocation].sum()
+    personnel3_allocated = allocation_amount.loc[included_allocation & personnel3_scope].sum()
+    all_coverage = all_allocated / company_amount if company_amount else 0.0
+    personnel3_coverage = personnel3_allocated / company_amount if company_amount else 0.0
     return pd.DataFrame(
         [
             {
@@ -372,11 +396,18 @@ def build_personnel3_checks(
                 "说明": "仅已匹配子项目纳入",
             },
             {
-                "检查项": "个人分摊覆盖率",
-                "计算值": coverage,
+                "检查项": "人员3分摊覆盖率",
+                "计算值": personnel3_coverage,
                 "对照值": "",
-                "差异/状态": "覆盖完整" if _close(coverage, 1.0) else "未覆盖金额已在个人层面排除",
-                "说明": "仅作填报完整度提示，不影响公司和部门金额",
+                "差异/状态": "覆盖完整" if _close(personnel3_coverage, 1.0) else "未覆盖金额已在人员3层面排除",
+                "说明": "仅汇总纳入口径项目中、人员3范围内的明确执行比例",
+            },
+            {
+                "检查项": "全部已填比例覆盖率",
+                "计算值": all_coverage,
+                "对照值": "",
+                "差异/状态": "覆盖完整" if _close(all_coverage, 1.0) else "仍有比例未填完整",
+                "说明": "包含人员3范围外人员，但排除不纳入口径项目",
             },
         ]
     )

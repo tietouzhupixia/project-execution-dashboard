@@ -197,7 +197,7 @@ def _formula_frames(
     people = _pad_frame(inputs.people, people_rows)
 
     allocation_rows = project_rows * 5
-    exception_rows = project_rows * 14 + outsource_rows
+    exception_rows = project_rows * 15 + outsource_rows
     return {
         "output_人均净合同额表": outputs.summary.copy(),
         "output_公司层面": outputs.company.copy(),
@@ -521,6 +521,7 @@ def _write_person_formulas(worksheet, allocation_sheet, personnel3_sheet) -> set
     people = _range(allocation_sheet.title, a["执行人员"], 2, last)
     scope = _range(allocation_sheet.title, a["是否人员3范围"], 2, last)
     amounts = _range(allocation_sheet.title, a["分摊26年净执行合同额"], 2, last)
+    project_amounts = _range(allocation_sheet.title, a["项目26年净执行合同额"], 2, last)
     for row in range(2, worksheet.max_row + 1):
         person = _cell(c, "人员3", row)
         amount = _cell(c, "26年净执行合同额", row)
@@ -533,7 +534,7 @@ def _write_person_formulas(worksheet, allocation_sheet, personnel3_sheet) -> set
             f'=IF({person}="","",SUMIFS({amounts},{people},{person},{scope},"是"))'
         )
         worksheet[count] = (
-            f'=IF({person}="","",COUNTIFS({people},{person},{scope},"是"))'
+            f'=IF({person}="","",COUNTIFS({people},{person},{scope},"是",{project_amounts},"<>0"))'
         )
         worksheet[_cell(c, "已填比例项目平均净额", row)] = (
             f'=IF({person}="","",IFERROR({amount}/{count},0))'
@@ -572,6 +573,8 @@ def _write_check_formulas(worksheet, company_sheet, department_sheet, allocation
     company_people = f"'{company_sheet.title}'!{_cell(company, '有效执行人数（人员3）', 2)}"
     department_amounts = _range(department_sheet.title, department["26年净执行合同额"], 2, max(department_sheet.max_row, 2))
     allocation_amounts = _range(allocation_sheet.title, allocation["分摊26年净执行合同额"], 2, max(allocation_sheet.max_row, 2))
+    allocation_scope = _range(allocation_sheet.title, allocation["是否人员3范围"], 2, max(allocation_sheet.max_row, 2))
+    allocation_project_amounts = _range(allocation_sheet.title, allocation["项目26年净执行合同额"], 2, max(allocation_sheet.max_row, 2))
     match_status = _range(match_sheet.title, match["匹配状态"], 2, max(match_sheet.max_row, 2))
     match_amounts = _range(match_sheet.title, match["纳入采信金额"], 2, max(match_sheet.max_row, 2))
     for row in range(2, worksheet.max_row + 1):
@@ -596,10 +599,20 @@ def _write_check_formulas(worksheet, company_sheet, department_sheet, allocation
             worksheet[calc] = f'=SUMIF({match_status},"已匹配",{match_amounts})'
             worksheet[compare] = '=""'
             worksheet[status] = '="已匹配子项目合计"'
-        elif name == "个人分摊覆盖率":
-            worksheet[calc] = f'=IFERROR(SUM({allocation_amounts})/{company_amount},0)'
+        elif name == "人员3分摊覆盖率":
+            worksheet[calc] = (
+                f'=IFERROR(SUMIFS({allocation_amounts},{allocation_scope},"是",'
+                f'{allocation_project_amounts},"<>0")/{company_amount},0)'
+            )
             worksheet[compare] = '=""'
-            worksheet[status] = f'=IF(ABS({calc}-1)<0.000000001,"覆盖完整","未覆盖金额已在个人层面排除")'
+            worksheet[status] = f'=IF(ABS({calc}-1)<0.000000001,"覆盖完整","未覆盖金额已在人员3层面排除")'
+        elif name == "全部已填比例覆盖率":
+            worksheet[calc] = (
+                f'=IFERROR(SUMIFS({allocation_amounts},{allocation_project_amounts},"<>0")/'
+                f'{company_amount},0)'
+            )
+            worksheet[compare] = '=""'
+            worksheet[status] = f'=IF(ABS({calc}-1)<0.000000001,"覆盖完整","仍有比例未填完整")'
     return set(c)
 
 
@@ -653,6 +666,9 @@ def _write_exception_formulas(
         included = _sheet_ref(
             project_sheet.title, _cell(projects, "是否纳入口径", input_row)
         )
+        project_net = _sheet_ref(
+            project_sheet.title, _cell(projects, "项目净执行合同额", input_row)
+        )
         raw_project_id = _source_ref(
             input_sheet, source["项目管理编号"], input_row
         )
@@ -667,6 +683,9 @@ def _write_exception_formulas(
             _source_ref(input_sheet, source[f"执行人员{slot}执行比例"], input_row)
             for slot in range(1, 6)
         ]
+        legacy_execution_people = (
+            _source_ref(input_sheet, source.get("A-执行人员"), input_row) or '""'
+        )
 
         for person, ratio in zip(person_refs, ratio_refs):
             write_row(
@@ -687,7 +706,9 @@ def _write_exception_formulas(
         persons = ",".join(person_refs)
         ratios = ",".join(ratio_refs)
         write_row(
-            f'AND({raw_project_name}<>"",COUNTA({persons})>0,COUNT({ratios})=0)',
+            f'AND({raw_project_name}<>"",OR('
+            f'AND(COUNTA({persons})>0,COUNT({ratios})=0),'
+            f'AND({legacy_execution_people}<>"",COUNTA({persons})=0)))',
             project_id,
             project_name,
             _excel_string("缺少执行比例"),
@@ -714,6 +735,15 @@ def _write_exception_formulas(
             _excel_string("不纳入口径项目"),
             _excel_string(
                 "项目经理区域包含绿链或数字化市场团队，不计入公司、部门、个人金额及项目数。"
+            ),
+        )
+        write_row(
+            f'AND({raw_project_name}<>"",{project_net}<0)',
+            project_id,
+            project_name,
+            _excel_string("项目净额为负"),
+            _excel_string(
+                "最终采信服务采购金额大于净额取数基数；当前按规则保留负数。"
             ),
         )
 

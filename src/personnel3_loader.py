@@ -33,6 +33,7 @@ class Personnel3Inputs:
     implementation: pd.DataFrame = field(default_factory=pd.DataFrame)
     outsource: pd.DataFrame = field(default_factory=pd.DataFrame)
     people: pd.DataFrame = field(default_factory=pd.DataFrame)
+    initial_confirmations: pd.DataFrame = field(default_factory=pd.DataFrame)
     source_sheets: dict[str, str] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -64,6 +65,7 @@ def load_personnel3_inputs(file: str | BinaryIO) -> Personnel3Inputs:
     result.people = _read_or_error(
         xls, people_sheet, "人员关系表", PEOPLE_ALIASES, result
     )
+    result.initial_confirmations = _read_initial_confirmations(xls, result.outsource)
 
     for logical, sheet in (
         ("implementation", implementation_sheet),
@@ -78,6 +80,29 @@ def load_personnel3_inputs(file: str | BinaryIO) -> Personnel3Inputs:
     _validate_columns(result.people, "人员关系表", PEOPLE_REQUIRED, result.errors)
     _validate_values(result)
     return result
+
+
+def _read_initial_confirmations(xls: pd.ExcelFile, outsource: pd.DataFrame) -> pd.DataFrame:
+    """Reuse audited decisions when a generated result workbook is uploaded."""
+    columns = ["外委序号", "匹配状态", "对应实施项目编号"]
+    if "audit_外委确认" in xls.sheet_names:
+        audit = pd.read_excel(xls, sheet_name="audit_外委确认")
+        if "确认状态" in audit.columns and "匹配状态" not in audit.columns:
+            audit = audit.rename(columns={"确认状态": "匹配状态"})
+        if set(columns).issubset(audit.columns):
+            return audit[columns].dropna(how="all").reset_index(drop=True)
+
+    input_columns = {"序号", "确认匹配状态", "确认对应实施项目编号"}
+    if input_columns.issubset(outsource.columns):
+        result = outsource[["序号", "确认匹配状态", "确认对应实施项目编号"]].rename(
+            columns={
+                "序号": "外委序号",
+                "确认匹配状态": "匹配状态",
+                "确认对应实施项目编号": "对应实施项目编号",
+            }
+        )
+        return result.loc[result["匹配状态"].notna()].reset_index(drop=True)
+    return pd.DataFrame(columns=columns)
 
 
 def _find_sheet(

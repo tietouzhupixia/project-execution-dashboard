@@ -95,6 +95,26 @@ def test_load_three_input_sheets_by_name_without_virtual_ratio_fill():
     assert "执行比例是否虚拟" not in loaded.implementation.columns
 
 
+def test_loads_audited_outsource_confirmations_from_generated_workbook():
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        _implementation().to_excel(writer, sheet_name="input_实施进度表", index=False)
+        pd.DataFrame(
+            [{"序号": 1, "外委项目名称": "外委A", "服务采购金额（元）": 100}]
+        ).to_excel(writer, sheet_name="input_外委更新金额", index=False)
+        _people().to_excel(writer, sheet_name="input_人员关系表", index=False)
+        pd.DataFrame(
+            [{"外委序号": 1, "确认状态": MATCHED, "对应实施项目编号": "P1"}]
+        ).to_excel(writer, sheet_name="audit_外委确认", index=False)
+    buffer.seek(0)
+
+    loaded = load_personnel3_inputs(buffer)
+
+    assert loaded.initial_confirmations.to_dict("records") == [
+        {"外委序号": 1, "匹配状态": MATCHED, "对应实施项目编号": "P1"}
+    ]
+
+
 def test_missing_new_input_sheets_returns_business_errors():
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
@@ -298,6 +318,21 @@ def test_three_level_outputs_keep_company_department_independent_of_person_gaps(
     assert people_result.loc["李四", "参与分摊项目数"] == 0
 
 
+def test_excluded_project_does_not_enter_person_amount_or_participation_count():
+    implementation, people, matches, project_detail = _phase2_fixture()
+    implementation.loc[1, "执行人员1"] = "王五"
+    implementation.loc[1, "执行人员1执行比例"] = 0.5
+    personnel3 = build_personnel3_list(people)
+    allocation = build_person_allocation(implementation, project_detail, personnel3)
+
+    _, _, person = build_three_level_outputs(project_detail, personnel3, allocation)
+    wang = person.set_index("人员3").loc["王五"]
+
+    assert wang["26年净执行合同额"] == 0
+    assert wang["参与分摊项目数"] == 0
+    assert personnel3_person_allocations(allocation, "王五").empty
+
+
 def test_exceptions_cover_ratios_out_of_scope_matching_and_exclusion():
     implementation, people, matches, project_detail = _phase2_fixture()
     personnel3 = build_personnel3_list(people)
@@ -330,7 +365,8 @@ def test_checks_and_combined_outputs_are_numeric_and_auditable():
     assert checks.loc["公司金额与部门合计一致", "差异/状态"] == 0
     assert checks.loc["人员3有效人数", "差异/状态"] == "通过"
     assert checks.loc["外委子项目自动采信金额", "计算值"] == 200
-    assert abs(checks.loc["个人分摊覆盖率", "计算值"] - 0.8) < 1e-12
+    assert abs(checks.loc["人员3分摊覆盖率", "计算值"] - 0.6) < 1e-12
+    assert abs(checks.loc["全部已填比例覆盖率", "计算值"] - 0.8) < 1e-12
     assert outputs.summary.set_index("指标").loc["公司人均净合同额", "值"] == 240
 
 
@@ -436,7 +472,7 @@ def test_personnel3_formula_export_uses_live_formulas_styles_and_text_project_id
     assert workbook["calculation_人员分摊明细"].max_row == 1001
     assert workbook["output_部门层面"].max_row == 101
     assert workbook["output_人员层面"].max_row == 101
-    assert workbook["output_异常检查"].max_row == 3001
+    assert workbook["output_异常检查"].max_row == 3201
     assert workbook["calculation_项目净额明细"]["A201"].value.startswith("=IF(AND(")
     assert workbook["calculation_人员分摊明细"]["A1001"].value.startswith("=IF(")
 
