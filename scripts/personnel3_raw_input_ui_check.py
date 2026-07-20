@@ -30,6 +30,15 @@ def main() -> int:
         page.locator(".st-key-personnel3_company_people").get_by_role(
             "button", name="22", exact=True
         ).wait_for(timeout=30_000)
+        page.locator(".st-key-drilldown_big_current_project_count").get_by_role(
+            "button", name="48", exact=True
+        ).wait_for(timeout=30_000)
+        page.locator(".st-key-drilldown_big_cross_project_count").get_by_role(
+            "button", name="4", exact=True
+        ).wait_for(timeout=30_000)
+        page.locator(".st-key-drilldown_big_current_delivery_rate").get_by_role(
+            "button", name="4.88%", exact=True
+        ).wait_for(timeout=30_000)
 
         body = page.locator("body").inner_text(timeout=30_000)
         status_lines = [
@@ -56,6 +65,9 @@ def main() -> int:
     print(f"status_lines={status_lines}")
     print("projects=59")
     print("people=22")
+    print("current_delivery=48")
+    print("cross_year_delivery=4")
+    print("delivery_rate=4.88%")
     print(f"errors={errors}")
     if errors:
         return 1

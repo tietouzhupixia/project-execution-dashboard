@@ -393,6 +393,15 @@ Authoritative rule source: workspace `../0713_rules_handoff.md`.
 - Raw `实施进度表0717(1).xlsx` upload verified: matching `29/9/23`, 59 projects, 22 people,
   no page errors. Regression entry: `scripts/personnel3_raw_input_ui_check.py`.
 
+### 2026-07-20 Delivery Date Alias
+
+- `normalize_raw_data` maps `B-预计交付日期（业务总表）` to canonical `预计交付日期`
+  before parsing dates. Existing canonical values win; the alias only fills missing values.
+- Legacy parsing now has `WORKBOOK_CACHE_SCHEMA`, separate from the Personnel-3 schema. Bump it
+  whenever normalization rules change or Streamlit may reuse pre-change normalized DataFrames.
+- Raw 0717 browser regression: current-year unaccepted 48, cross-year unaccepted 4,
+  2026 delivery rate `2/41 = 4.88%`, and no application errors.
+
 - `python -m compileall -q app.py src tests` passed.
 - Direct manual execution of the two starter test functions passed.
 - `.venv` was created.

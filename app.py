@@ -79,9 +79,13 @@ if not uploaded:
     st.info("请上传包含 `实施进度底表` 的 Excel 文件。")
     st.stop()
 
+WORKBOOK_CACHE_SCHEMA = 2
+
+
 @st.cache_data(show_spinner="正在解析上传文件...")
-def load_workbook_cached(file_bytes: bytes):
+def load_workbook_cached(file_bytes: bytes, schema_version: int):
     """Cache parsing so filter clicks don't re-read the Excel on every rerun."""
+    del schema_version  # Part of the cache key; bump it when normalization rules change.
     return load_workbook(io.BytesIO(file_bytes))
 
 
@@ -96,7 +100,7 @@ def load_personnel3_inputs_cached(file_bytes: bytes, schema_version: int):
 
 try:
     uploaded_bytes = uploaded.getvalue()
-    workbook = load_workbook_cached(uploaded_bytes)
+    workbook = load_workbook_cached(uploaded_bytes, WORKBOOK_CACHE_SCHEMA)
 except Exception as exc:  # noqa: BLE001 - 面向业务用户的兜底提示
     st.error(
         "文件解析失败，请确认上传的是包含「实施进度底表」的 Excel（.xlsx）。\n\n"

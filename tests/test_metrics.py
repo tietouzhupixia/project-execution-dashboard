@@ -162,6 +162,51 @@ def test_chart_drilldown_filters_match_displayed_counts():
     assert project_subset_by_delivery_group(raw, "delivered_unaccepted", 2026)["A-项目名称"].tolist() == ["P2"]
 
 
+def test_business_delivery_date_alias_populates_delivery_metrics():
+    raw = pd.DataFrame(
+        [
+            {
+                "A-项目名称": "当年项目",
+                "交付状态": "已交付-已验收",
+                "B-预计交付日期（业务总表）": "2026-08-10",
+            },
+            {
+                "A-项目名称": "跨年项目",
+                "交付状态": "未交付-未验收",
+                "B-预计交付日期（业务总表）": "2027-03-01",
+            },
+        ]
+    )
+    warnings: list[str] = []
+
+    normalized = normalize_raw_data(raw, warnings)
+    delivery = build_delivery_analysis(normalized, ref_year=2026)
+
+    assert normalized["预计交付日期"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-08-10",
+        "2027-03-01",
+    ]
+    assert delivery["cross_year"]["count"] == 1
+    assert delivery["accepted"]["delivery_rate"] == 1.0
+    assert any("识别为 预计交付日期" in warning for warning in warnings)
+
+
+def test_delivery_date_alias_only_fills_blank_canonical_values():
+    raw = pd.DataFrame(
+        {
+            "预计交付日期": ["2026-01-01", None],
+            "B-预计交付日期（业务总表）": ["2027-01-01", "2026-02-01"],
+        }
+    )
+
+    normalized = normalize_raw_data(raw, [])
+
+    assert normalized["预计交付日期"].dt.strftime("%Y-%m-%d").tolist() == [
+        "2026-01-01",
+        "2026-02-01",
+    ]
+
+
 def test_derive_archive_action_columns_when_absent():
     """Uploads without the 6 action columns must get them recomputed (DATA_RULES §10)."""
     raw = pd.DataFrame(

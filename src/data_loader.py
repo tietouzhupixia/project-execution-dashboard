@@ -14,6 +14,10 @@ KEY_COLUMNS = ["A-项目名称", "当前进度", "交付状态"]
 EXEC_PERSON_COLUMNS = [f"执行人员{i}" for i in range(1, 6)]
 EXEC_RATIO_COLUMNS = [f"执行人员{i}执行比例" for i in range(1, 6)]
 
+COLUMN_ALIASES = {
+    "预计交付日期": ("B-预计交付日期（业务总表）",),
+}
+
 
 @dataclass
 class WorkbookData:
@@ -65,6 +69,7 @@ def normalize_raw_data(df: pd.DataFrame, warnings: list[str] | None = None) -> p
     """Normalize percentage, date, and execution-ratio fields."""
     warnings = warnings if warnings is not None else []
     out = df.copy()
+    apply_column_aliases(out, warnings)
 
     for col in ["当前进度", "进度偏差", "时间进度", "B-服务采购比例", *EXEC_RATIO_COLUMNS]:
         if col in out.columns:
@@ -87,6 +92,25 @@ def normalize_raw_data(df: pd.DataFrame, warnings: list[str] | None = None) -> p
     ensure_execution_people_and_ratios(out, warnings)
     derive_archive_action_columns(out, warnings)
     return out
+
+
+def apply_column_aliases(df: pd.DataFrame, warnings: list[str]) -> None:
+    """Populate canonical columns from known business-template aliases."""
+    for canonical, aliases in COLUMN_ALIASES.items():
+        source = next((alias for alias in aliases if alias in df.columns), None)
+        if source is None:
+            continue
+
+        if canonical not in df.columns:
+            df[canonical] = df[source]
+            warnings.append(f"已将字段 {source} 识别为 {canonical}。")
+            continue
+
+        missing = df[canonical].isna() | df[canonical].astype(str).str.strip().eq("")
+        filled = missing & df[source].notna()
+        if filled.any():
+            df.loc[filled, canonical] = df.loc[filled, source]
+            warnings.append(f"已使用字段 {source} 补充 {canonical} 的 {int(filled.sum())} 个空值。")
 
 
 # (derived name, progress threshold, source archive column)
